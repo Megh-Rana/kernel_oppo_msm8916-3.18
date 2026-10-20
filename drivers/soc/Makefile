@@ -3,6 +3,7 @@
 #
 
 obj-$(CONFIG_ARCH_MSM)		+= qcom/
+obj-$(CONFIG_MACH_OPPO)		+= oppo/
 obj-$(CONFIG_ARCH_TEGRA)	+= tegra/
 obj-$(CONFIG_SOC_TI)		+= ti/
 obj-$(CONFIG_PLAT_VERSATILE)	+= versatile/

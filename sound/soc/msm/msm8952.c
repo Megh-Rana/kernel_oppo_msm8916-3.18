@@ -3403,6 +3403,7 @@ static int msm8952_asoc_machine_remove(struct platform_device *pdev)
 
 static const struct of_device_id msm8952_asoc_machine_of_match[]  = {
 	{ .compatible = "qcom,msm8952-audio-codec", },
+	{ .compatible = "qcom,msm8x16-audio-codec", },
 	{},
 };
 

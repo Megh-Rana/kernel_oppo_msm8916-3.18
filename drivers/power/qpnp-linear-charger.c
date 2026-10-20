@@ -397,6 +397,8 @@ struct qpnp_lbc_chip {
 	struct delayed_work		parallel_work;
 };
 
+struct qpnp_lbc_chip *the_chip = NULL;
+
 static void qpnp_lbc_enable_irq(struct qpnp_lbc_chip *chip,
 					struct qpnp_lbc_irq *irq)
 {
@@ -648,6 +650,47 @@ static int qpnp_lbc_is_usb_chg_plugged_in(struct qpnp_lbc_chip *chip)
 	pr_debug("rt_sts 0x%x\n", usbin_valid_rt_sts);
 
 	return (usbin_valid_rt_sts & USB_IN_VALID_MASK) ? 1 : 0;
+}
+
+#define BMS_VM_BMS_DATA_REG_0			0x40B0
+void opchg_set_pmic_soc_memory(int soc)
+{
+	int rc = 0;
+	u8 soc_temp = 0;
+
+	if (the_chip == NULL) {
+		pr_debug("%s the_chip is NULL\n", __func__);
+		return;
+	}
+	soc_temp = soc;
+	rc = qpnp_lbc_write(the_chip, BMS_VM_BMS_DATA_REG_0, &soc_temp, 1);
+	if (rc)
+		pr_err("%s fail,rc:%d\n", __func__, rc);
+}
+
+int opchg_get_pmic_soc_memory(void)
+{
+	int rc = 0;
+	u8 reg = 0;
+
+	if (the_chip == NULL) {
+		pr_debug("%s the_chip is NULL\n", __func__);
+		return reg;
+	}
+	rc = qpnp_lbc_read(the_chip, BMS_VM_BMS_DATA_REG_0, &reg, 1);
+	if (rc)
+		pr_err("%s fail,rc:%d\n", __func__, rc);
+
+	return reg;
+}
+
+int opchg_get_charger_inout(void)
+{
+	int charger_in = 0;
+
+	if (the_chip)
+		charger_in = qpnp_lbc_is_usb_chg_plugged_in(the_chip);
+	return charger_in;
 }
 
 static int qpnp_lbc_is_chg_gone(struct qpnp_lbc_chip *chip)
@@ -3201,6 +3244,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	chip->spmi = spmi;
 	chip->fake_battery_soc = -EINVAL;
 	dev_set_drvdata(&spmi->dev, chip);
+	the_chip = chip;
 	device_init_wakeup(&spmi->dev, 1);
 	mutex_init(&chip->jeita_configure_lock);
 	mutex_init(&chip->chg_enable_lock);
