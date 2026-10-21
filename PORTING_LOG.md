@@ -234,3 +234,36 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and `dt_test10.img`.
   - Built `boot-3.18-test10.img` and `kernel-3.18-a37f-test10.zip`.
   - Pushed to device `/sdcard/` and flashed `boot-3.18-test10.img` to `boot` partition (md5sum `7ff22938a16f5fa557a3486edd1e4dab` verified).
+
+
+---
+
+## Phase 10: Restore `soc.0` Bus Naming for Legacy Userspace & Fix DSI Escape Clock (Test 11 - `ff9cedf7359`)
+
+- **Diagnosis (from Test 10 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - Android 10 first stage init mounted `/system` at `t = 11.309s`:
+      `init: [libfs_mgr]__mount(source=/dev/block/platform/soc/7824900.sdhci/by-name/system,target=/system,type=ext4)=0: Success`
+    - Init switched root to `/system`, loaded SELinux policy, and launched second stage init at `t = 12.049s` (`init second stage started!`).
+    - Launched core services: `logd`, `servicemanager`, `hwservicemanager`, `vndservicemanager`, `vold`.
+    - Android kernel ran continuously for over 138 seconds without panics or unexpected reboots.
+  - **Two Remaining Issues Discovered**:
+    1. **Second-Stage `init.qcom.rc` Mount Timeout**:
+       At `t = 25.331s`, second stage init ran `/vendor/etc/init/hw/init.qcom.rc:42`:
+       `wait /dev/block/platform/soc.0/${ro.boot.bootdevice}`
+       `symlink /dev/block/platform/soc.0/${ro.boot.bootdevice} /dev/block/bootdevice`
+       Because the bus was named `soc` (without `.0`), this wait timed out, `/dev/block/bootdevice` was never created, and `mount_all /vendor/etc/fstab.qcom` skipped mounting `/data`, `/cache`, and `/persist`.
+    2. **MDSS DSI Escape Clock Provider**:
+       In Test 10, DSI controller probe failed at `t = 4.800s`:
+       `mdss_dsi_link_clk_init: can't find dsi_esc_clk. rc=-2`
+       Because `clk_gcc_mdss_esc0_clk` was incorrectly requested from `&clock_gcc_mdss` rather than `&clock_gcc`.
+- **Fixes Applied**:
+  - In `arch/arm/boot/dts/qcom/msm8916.dtsi`:
+    - Defined root bus node as `soc: soc.0 { };` so the platform bus natively produces `/sys/devices/soc.0/` and `/dev/block/platform/soc.0/`.
+    - Updated `firmware/android/fstab/system` device path to `/dev/block/platform/soc.0/7824900.sdhci/by-name/system`.
+  - In `arch/arm/boot/dts/qcom/msm8916-mdss.dtsi`:
+    - Fixed `clk_gcc_mdss_esc0_clk` provider from `&clock_gcc_mdss` to `&clock_gcc`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and `dt_test11.img`.
+  - Built `boot-3.18-test11.img` and `kernel-3.18-a37f-test11.zip`.
+  - Flashed `boot-3.18-test11.img` to `boot` partition (md5sum `1811c56a92d38f96b735f285946ed4df` verified).
