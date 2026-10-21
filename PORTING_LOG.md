@@ -297,3 +297,32 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test12.img` and `kernel-3.18-a37f-test12.zip`.
   - Flashed `boot-3.18-test12.img` to `boot` partition (md5sum `7d7f7a6783284e8a4e52c275d78c3b53` verified).
 
+---
+
+## Phase 12: KGSL SMMU Device Tree Integration & MMU Null Pagetable Guard (Test 13 - `0ea58c2b9c0`)
+
+- **Diagnosis (from Test 12 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - Kernel ran stably for **44.87 seconds**.
+    - Microcode loading succeeded seamlessly from `/vendor/firmware/a300_pm4.fw`.
+    - Android services initialized: `time_daemon`, `vold`, `apexd`, `hwservicemanager`, `rild`.
+    - `SurfaceFlinger` successfully loaded proprietary Adreno OpenGL drivers (`libEGL_adreno.so`, `libGLESv1_CM_adreno.so`, `libGLESv2_adreno.so`) and initialized Adreno EGL (`QUALCOMM Build: 10/21/16`).
+  - **Panic Mechanism at `t = 44.87s`**:
+    - SurfaceFlinger called `kgsl_ioctl_gpumem_alloc_id` to allocate the primary display surface buffer.
+    - In CAF 3.18, Qualcomm refactored KGSL IOMMU binding: KGSL probes a dedicated `compatible = "qcom,kgsl-smmu-v2"` DT node with child context bank `gfx3d_user`. Because `msm8916-gpu.dtsi` lacked this node, `kgsl_iommu_probe` returned `-ENODEV` and KGSL defaulted to `KGSL_MMU_TYPE_NONE` (NoMMU).
+    - In NoMMU mode, `entry->memdesc.pagetable` remained `NULL`.
+    - `kgsl_mem_entry_attach_process` invoked `kgsl_mmu_map(entry->memdesc.pagetable, &entry->memdesc)`.
+    - `kgsl_mmu_map` did not verify `pagetable != NULL`, resulting in `atomic_inc(&pagetable->stats.entries)` dereferencing offset `0x28` (`NULL + 0x28`), causing:
+      `Unable to handle kernel NULL pointer dereference at virtual address 00000028`
+      `PC is at kgsl_mmu_map+0x50/0xd0`
+- **Fixes Applied**:
+  - In `arch/arm/boot/dts/qcom/msm8916-gpu.dtsi`:
+    - Added `kgsl_msm_iommu: qcom,kgsl-iommu@1f00000` with compatible `qcom,kgsl-smmu-v2`, hardware protection aperture `qcom,protect = <0xa000 0x1000>`, GCC SMMU clocks, and child `gfx3d_user` (`qcom,gpu-offset = <0xa000>`).
+  - In `drivers/gpu/msm/kgsl_mmu.c`:
+    - Added defensive `if (!pagetable) return -EINVAL;` guards to `kgsl_mmu_map` and `kgsl_mmu_unmap`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test13.img`.
+  - Built `boot-3.18-test13.img` and `kernel-3.18-a37f-test13.zip`.
+  - Pushed to `/sdcard/` and flashed `boot-3.18-test13.img` to `boot` partition (md5sum `759bda931ad34754007de7f271b3c56f` verified).
+
+
