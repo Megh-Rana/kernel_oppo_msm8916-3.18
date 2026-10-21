@@ -197,3 +197,40 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and `dt_test9.img`.
   - Packaged `boot-3.18-test9.img` and `kernel-3.18-a37f-test9.zip`.
   - Flashed `boot-3.18-test9.img` to `boot` partition (md5sum `fccc874379920ee7e0f1f3b265132202` verified).
+
+
+---
+
+## Phase 9: Android 10 First Stage Mount Path, PS_HOLD Reboot, and MDSS DSI Hierarchy (Test 10 - `ce0dc0712ee`)
+
+- **Diagnosis (from Test 9 ramoops)**:
+  - Linux 3.18 kernel booted completely with **zero kernel panics or crashes** and reached userspace at `t = 10.916s` (`init: init first stage started!`).
+  - Android 10 first stage init failed early mounting `/system`:
+    ```
+    init: [libfs_mgr]ReadDefaultFstab(): failed to find device default fstab
+    init: [libfs_mgr]Failed to open '/dev/block/platform/soc.0/7824900.sdhci/by-name/system': No such file or directory
+    init: [libfs_mgr]__mount(source=/dev/block/platform/soc.0/7824900.sdhci/by-name/system(missing),target=/system,type=ext4)=-1: No such file or directory
+    init: Failed to mount /system: No such file or directory
+    init: Failed to mount required partitions early ...
+    reboot: Restarting system with command 'bootloader'
+    Reboot failed -- System halted
+    ```
+  - **Root Causes**:
+    1. **Fstab Path**: In Linux 3.10, root buses used `bus_no_reg_magic` atomic counter, creating `/dev/block/platform/soc.0/`. In Linux 3.18, upstream removed `bus_no_reg_magic`, making the bus name `/dev/block/platform/soc/`. Because `msm8916.dtsi` specified `soc.0`, `first_stage_mount` failed to find the required block device.
+    2. **PS_HOLD Reboot Failure**: `restart@4ab000` node in `msm8916.dtsi` lacked `reg-names = "pshold-base", "tcsr-boot-misc-detect";`, preventing `drivers/power/reset/msm-poweroff.c` from mapping the `ps_hold` register and registering `arm_pm_restart`. As a result, when userspace invoked `reboot()`, restart failed and printed `Reboot failed -- System halted`.
+    3. **MDSS DSI Clocks**: `clock_gcc_mdss` referenced `clk_pixel_clk_src` and `clk_byte_clk_src` instead of `clk_dsi_pll0_pixel_clk_src` and `clk_dsi_pll0_byte_clk_src`, failing probe with `Failed to get pixel source (-2)`.
+    4. **MDSS DSI Two-Tier Driver Hierarchy**: In CAF 3.18, the MDSS DSI driver was refactored into a parent resource driver (`qcom,mdss-dsi`) and child controller (`qcom,mdss-dsi-ctrl`). Without the parent `mdss_dsi` node, `mdss_dsi_res` was NULL and child probe failed with `mdss_dsi_ctrl_probe: Unable to get the ctrl_pdata (-22)`.
+- **Fixes Applied**:
+  - In `arch/arm/boot/dts/qcom/msm8916.dtsi`:
+    - Changed `firmware/android/fstab/system` device path to `/dev/block/platform/soc/7824900.sdhci/by-name/system`.
+    - Added `reg-names = "pshold-base", "tcsr-boot-misc-detect";` to `restart@4ab000`.
+    - Updated `clock_gcc_mdss` to use `clk_dsi_pll0_pixel_clk_src` and `clk_dsi_pll0_byte_clk_src`.
+  - In `include/dt-bindings/clock/msm-clocks-8916.h`:
+    - Added definitions for `clk_dsi_pll0_byte_clk_src` (`0x44539836`) and `clk_dsi_pll0_pixel_clk_src` (`0x5767c287`).
+  - In `arch/arm/boot/dts/qcom/msm8916-mdss.dtsi`:
+    - Structured `mdss_dsi: qcom,mdss_dsi@0` (compatible `qcom,mdss-dsi`) as the parent device with GDSC, VDDA, VDDIO supplies, bus scaling, and clocks.
+    - Positioned `mdss_dsi0: qcom,mdss_dsi@1a98000` as the child controller with panel supplies and DSI clocks.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and `dt_test10.img`.
+  - Built `boot-3.18-test10.img` and `kernel-3.18-a37f-test10.zip`.
+  - Pushed to device `/sdcard/` and flashed `boot-3.18-test10.img` to `boot` partition (md5sum `7ff22938a16f5fa557a3486edd1e4dab` verified).
