@@ -325,4 +325,34 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test13.img` and `kernel-3.18-a37f-test13.zip`.
   - Pushed to `/sdcard/` and flashed `boot-3.18-test13.img` to `boot` partition (md5sum `759bda931ad34754007de7f271b3c56f` verified).
 
+---
+
+## Phase 13: Unblock MDSS Framebuffer Commit Ioctls & Enable SW Sync Device (Test 14 - `bbdc274f32a`)
+
+- **Diagnosis (from Test 13 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - Kernel ran continuously for **over 5 minutes (304 seconds)** without crashing or panicking.
+    - KGSL SMMU probe succeeded; Adreno GPU allocated virtual memory without issues.
+    - Full Android 10 userspace was alive: SurfaceFlinger and HWComposer (`hwcomposer.msm8916.so`) were actively rendering and attempting to commit display frames at **60 FPS**.
+  - **Root Cause of Splash Screen Persistence**:
+    - In `pmsg-ramoops-0`: HWComposer logged continuous failures:
+      `qdhwcomposer hwc_sync: ioctl MSMFB_BUFFER_SYNC failed, err=Invalid argument`
+      `qdoverlay Failed to call ioctl MSMFB_DISPLAY_COMMIT err=Invalid argument`
+    - In `console-ramoops-0`: MDSS driver logged:
+      `mdss_fb_compat_buf_sync: failed -22`
+      `mdss_fb_do_ioctl: Unsupported ioctl`
+    - In `drivers/video/msm/mdss/mdss_fb.c:4817`, Qualcomm had introduced `check_not_supported_ioctl(cmd)` which deliberately intercepted and blocked `MSMFB_DISPLAY_COMMIT`, `MSMFB_BUFFER_SYNC`, `MSMFB_OVERLAY_SET`, `MSMFB_OVERLAY_PLAY`, etc., printing `Unsupported ioctl` and returning `-EINVAL`.
+    - This blocked the hardware composer from committing frames to the display controller, preventing continuous splash from releasing.
+    - In addition, `/dev/sw_sync` was missing because `CONFIG_SW_SYNC_USER` was not enabled in defconfig.
+- **Fixes Applied**:
+  - In `drivers/video/msm/mdss/mdss_fb.c`:
+    - Updated `check_not_supported_ioctl(cmd)` to `return false;`, allowing all standard MDSS framebuffer and overlay ioctls (`MSMFB_DISPLAY_COMMIT`, `MSMFB_BUFFER_SYNC`, `MSMFB_OVERLAY_SET`, etc.) to pass through to their handlers.
+  - In `arch/arm64/configs/lineageos_a37f_defconfig`:
+    - Enabled `CONFIG_SW_SYNC=y` and `CONFIG_SW_SYNC_USER=y`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test14.img`.
+  - Built `boot-3.18-test14.img` and `kernel-3.18-a37f-test14.zip`.
+  - Pushed to `/sdcard/` and flashed `boot-3.18-test14.img` to `boot` partition (md5sum `7fc3140035bbaef65e42cc2adf332958` verified).
+
+
 
