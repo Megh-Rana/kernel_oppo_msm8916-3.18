@@ -196,7 +196,7 @@
 			vddio-supply = <&pm8916_l6>;
 			clocks = <&clock_gcc_mdss clk_gcc_mdss_byte0_clk>,
 				 <&clock_gcc_mdss clk_gcc_mdss_pclk0_clk>,
-				 <&clock_gcc_mdss clk_gcc_mdss_esc0_clk>;
+				 <&clock_gcc clk_gcc_mdss_esc0_clk>;
 			clock-names = "byte_clk", "pixel_clk", "core_clk";
 			qcom,platform-strength-ctrl = [ff 06];
 			qcom,platform-bist-ctrl = [00 00 b1 ff 00 00];
