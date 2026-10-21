@@ -151,3 +151,26 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built master `dt_test7.img` (QCDT v2 with oppoId 15399).
   - Packaged `boot-3.18-test7.img` (19MB) and `kernel-3.18-a37f-test7.zip`.
   - Pushed to `/sdcard/` and flashed to `boot` partition via `dd`.
+
+---
+
+## Phase 7: ION DMA_CMA Crash Fix (Test 8 - `dd76db4d9ed`)
+
+- **Diagnosis**:
+  - `console-ramoops-0` confirmed Test 7 reached `t = 4.862s` before crashing.
+  - SMEM initialization succeeded, `devinfo_probe` succeeded, clocks, thermal, cpufreq, and battery all probed.
+  - Fatal crash at `t = 4.862s`:
+    `Unable to handle kernel NULL pointer dereference at virtual address 00000000`
+    `PC is at cma_get_base+0x0/0xc` (called from `msm_ion_probe+0x4f0`)
+  - **Mechanism**:
+    - `lineageos_a37f_defconfig` lacked `CONFIG_DMA_CMA=y`.
+    - When `CONFIG_DMA_CMA` is disabled, `include/linux/dma-contiguous.h` defines a stub `dev_get_cma_area(dev)` returning `NULL`.
+    - In `drivers/staging/android/ion/msm/msm_ion.c`, `msm_ion_get_heap_dt_data()` parsed the dynamic CMA pools (`venus_qseecom_mem` and `audio_mem`), found no static `reg` property, and called `cma_get_base(dev_get_cma_area(heap->priv))`.
+    - Passing `NULL` into `cma_get_base()` dereferenced `cma->base_pfn` at `0x00000000`, crashing CPU 1.
+- **Fixes Applied**:
+  - Enabled `CONFIG_DMA_CMA=y` and `CONFIG_CMA_SIZE_MBYTES=16` in `lineageos_a37f_defconfig`.
+  - Added NULL safety checks in `drivers/staging/android/ion/msm/msm_ion.c` to prevent crashes if `dev_get_cma_area()` ever returns NULL.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and `dt_test8.img`.
+  - Built `boot-3.18-test8.img` and `kernel-3.18-a37f-test8.zip`.
+  - Flashed `boot-3.18-test8.img` to `boot` partition (md5sum `6b59b2221f4a3c73aad1da21208c9d88` verified).
