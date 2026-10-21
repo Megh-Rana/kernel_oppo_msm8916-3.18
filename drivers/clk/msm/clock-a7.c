@@ -375,6 +375,10 @@ static int clock_a7_probe(struct platform_device *pdev)
 	bool compat_bin2 = false;
 	bool opp_enable;
 
+	pr_err("clock-a7: probe entered for %s (node: %s)\n",
+		dev_name(&pdev->dev),
+		pdev->dev.of_node ? pdev->dev.of_node->full_name : "none");
+
 	compat_bin = of_device_is_compatible(pdev->dev.of_node,
 						"qcom,clock-a53-8916");
 	compat_bin2 = of_device_is_compatible(pdev->dev.of_node,
@@ -393,14 +397,16 @@ static int clock_a7_probe(struct platform_device *pdev)
 
 	vdd_cpu.regulator[0] = devm_regulator_get(&pdev->dev, "cpu-vdd");
 	if (IS_ERR(vdd_cpu.regulator[0])) {
-		if (PTR_ERR(vdd_cpu.regulator[0]) != -EPROBE_DEFER)
-			dev_err(&pdev->dev, "unable to get regulator\n");
+		pr_err("clock-a7: devm_regulator_get(cpu-vdd) failed: %ld\n",
+			PTR_ERR(vdd_cpu.regulator[0]));
 		return PTR_ERR(vdd_cpu.regulator[0]);
 	}
 
 	rc = of_get_clk_src(pdev, a7ssmux.parents);
-	if (IS_ERR_VALUE(rc))
+	if (IS_ERR_VALUE(rc)) {
+		pr_err("clock-a7: of_get_clk_src failed: %d\n", rc);
 		return rc;
+	}
 
 	a7ssmux.num_parents = rc;
 
@@ -437,6 +443,7 @@ static int clock_a7_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "msm_clock_register failed\n");
 		return rc;
 	}
+	pr_err("clock-a7: probed successfully!\n");
 
 	/* Force a PLL reconfiguration */
 	aux_clk = a7ssmux.parents[0].src;

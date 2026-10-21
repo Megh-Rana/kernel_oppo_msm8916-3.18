@@ -390,6 +390,10 @@ static int msm_cpufreq_probe(struct platform_device *pdev)
 	struct cpufreq_frequency_table *ftbl;
 	int rc;
 
+	pr_err("msm-cpufreq: probe entered for %s (node: %s)\n",
+		dev_name(dev),
+		dev->of_node ? dev->of_node->full_name : "none");
+
 	l2_clk = devm_clk_get(dev, "l2_clk");
 	if (IS_ERR(l2_clk))
 		l2_clk = NULL;
@@ -397,8 +401,11 @@ static int msm_cpufreq_probe(struct platform_device *pdev)
 	for_each_possible_cpu(cpu) {
 		snprintf(clk_name, sizeof(clk_name), "cpu%d_clk", cpu);
 		c = devm_clk_get(dev, clk_name);
-		if (IS_ERR(c))
+		if (IS_ERR(c)) {
+			pr_err("msm-cpufreq: devm_clk_get(%s) failed: %ld\n",
+				clk_name, PTR_ERR(c));
 			return PTR_ERR(c);
+		}
 		cpu_clk[cpu] = c;
 	}
 	hotplug_ready = true;
@@ -480,13 +487,17 @@ static struct platform_driver msm_cpufreq_plat_driver = {
 static int __init msm_cpufreq_register(void)
 {
 	int cpu;
+	int rc;
 
+	pr_err("msm-cpufreq: msm_cpufreq_register called\n");
 	for_each_possible_cpu(cpu) {
 		mutex_init(&(per_cpu(suspend_data, cpu).suspend_mutex));
 		per_cpu(suspend_data, cpu).device_suspended = 0;
 	}
 
-	return platform_driver_register(&msm_cpufreq_plat_driver);
+	rc = platform_driver_register(&msm_cpufreq_plat_driver);
+	pr_err("msm-cpufreq: platform_driver_register returned %d\n", rc);
+	return rc;
 }
 
 subsys_initcall(msm_cpufreq_register);
