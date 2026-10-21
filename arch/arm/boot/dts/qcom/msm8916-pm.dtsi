@@ -103,6 +103,7 @@
 		qcom,phase-port = <0x1>;
 		qcom,pfm-port = <0x2>;
 		qcom,cpu-vctl-mask = <0xf>;
+		qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>;
 		qcom,saw2-spm-cmd-ret = [00 03 00 0f];
 		qcom,saw2-spm-cmd-gdhs = [00 20 32 6B C0 E0 D0 42 F0 03 50 4E
 				02 02 D0 E0 C0 22 6B 02 32 52 F0 0F];

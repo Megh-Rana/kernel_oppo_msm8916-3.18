@@ -654,6 +654,10 @@ static int get_cpu_id(struct device_node *node)
 			if (of_get_cpu_node(cpu, NULL) == cpu_node)
 				return cpu;
 		}
+	} else if (!of_property_read_u32(node, "qcom,core-id", &cpu)) {
+		if (cpu < num_possible_cpus())
+			return cpu;
+		return num_possible_cpus();
 	} else
 		return num_possible_cpus();
 
@@ -693,6 +697,7 @@ static void get_cpumask(struct device_node *node, struct cpumask *mask)
 	int idx = 0;
 	struct device_node *cpu_node;
 	char *key = "qcom,cpu-vctl-list";
+	u32 mask_val;
 
 	cpu_node = of_parse_phandle(node, key, idx++);
 	while (cpu_node) {
@@ -702,6 +707,13 @@ static void get_cpumask(struct device_node *node, struct cpumask *mask)
 		}
 		cpu_node = of_parse_phandle(node, key, idx++);
 	};
+
+	if (!of_property_read_u32(node, "qcom,cpu-vctl-mask", &mask_val)) {
+		for_each_possible_cpu(c) {
+			if (mask_val & (1 << c))
+				cpumask_set_cpu(c, mask);
+		}
+	}
 }
 
 static int msm_spm_dev_probe(struct platform_device *pdev)

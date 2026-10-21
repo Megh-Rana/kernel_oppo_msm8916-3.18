@@ -997,6 +997,8 @@ static int spm_regulator_probe(struct spmi_device *spmi)
 	}
 
 	bypass_spm = of_property_read_bool(node, "qcom,bypass-spm");
+	pr_err("spm-regulator: probe entered for %s (bypass_spm=%d)\n",
+		node ? node->name : "unknown", bypass_spm);
 	if (!bypass_spm) {
 		rc = msm_spm_probe_done();
 		if (rc) {
@@ -1114,6 +1116,8 @@ static int spm_regulator_probe(struct spmi_device *spmi)
 			__func__, rc);
 		return rc;
 	}
+
+	pr_err("spm-regulator: registered %s successfully!\n", vreg->rdesc.name);
 
 	rc = spm_regulator_avs_register(vreg, &spmi->dev, node);
 	if (rc) {

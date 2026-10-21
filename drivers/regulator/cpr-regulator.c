@@ -2287,8 +2287,7 @@ static int cpr_apc_init(struct platform_device *pdev,
 	}
 
 	if (rc) {
-		if (rc != -EPROBE_DEFER)
-			cpr_err(cpr_vreg, "devm_regulator_get: rc=%d\n", rc);
+		pr_err("cpr-regulator: devm_regulator_get(vdd_apc) failed: rc=%d\n", rc);
 		return rc;
 	}
 
@@ -2297,14 +2296,12 @@ static int cpr_apc_init(struct platform_device *pdev,
 		cpr_vreg->vdd_mx = devm_regulator_get(&pdev->dev, "vdd-mx");
 		if (IS_ERR_OR_NULL(cpr_vreg->vdd_mx)) {
 			rc = PTR_RET(cpr_vreg->vdd_mx);
-			if (rc != -EPROBE_DEFER)
-				cpr_err(cpr_vreg,
-					"devm_regulator_get: vdd-mx: rc=%d\n",
-					rc);
+			pr_err("cpr-regulator: devm_regulator_get(vdd-mx) failed: rc=%d\n", rc);
 			return rc;
 		}
 	}
 
+	pr_err("cpr-regulator: cpr_apc_init succeeded!\n");
 	return 0;
 }
 
@@ -6243,6 +6240,8 @@ static int cpr_regulator_probe(struct platform_device *pdev)
 		cpr_apc_exit(cpr_vreg);
 		return rc;
 	}
+
+	pr_err("cpr-regulator: registered %s successfully!\n", rdesc->name);
 
 	platform_set_drvdata(pdev, cpr_vreg);
 	cpr_debugfs_init(cpr_vreg);

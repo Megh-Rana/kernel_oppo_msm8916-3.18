@@ -561,6 +561,9 @@ static void mdss_dsi_phy_regulator_disable(struct mdss_dsi_ctrl_pdata *ctrl)
 	if (ctrl->shared_data->phy_rev == DSI_PHY_REV_20)
 		return;
 
+	if (!ctrl->phy_regulator_io.base)
+		return;
+
 	MIPI_OUTP(ctrl->phy_regulator_io.base + 0x018, 0x000);
 }
 
@@ -611,6 +614,9 @@ static void mdss_dsi_28nm_phy_regulator_enable(
 {
 	struct mdss_dsi_phy_ctrl *pd;
 	pd = &(((ctrl_pdata->panel_data).panel_info.mipi).dsi_phy_db);
+
+	if (!ctrl_pdata->phy_regulator_io.base)
+		return;
 
 	if (pd->reg_ldo_mode) {
 		/* Regulator ctrl 0 */
@@ -752,6 +758,9 @@ static void mdss_dsi_20nm_phy_regulator_enable(struct mdss_dsi_ctrl_pdata
 
 	pd = &(((ctrl_pdata->panel_data).panel_info.mipi).dsi_phy_db);
 	phy_io_base = ctrl_pdata->phy_regulator_io.base;
+
+	if (!phy_io_base)
+		return;
 
 	if (pd->regulator_len != 7) {
 		pr_err("%s: wrong regulator settings\n", __func__);
