@@ -2717,24 +2717,26 @@ wcnss_dt_parse_vreg_level(struct device *dev, int index,
 					 voltage_levels,
 					 ARRAY_SIZE(voltage_levels));
 	if (ret) {
-		dev_err(dev, "error reading %s property\n", vreg_name);
-		return ret;
+		dev_warn(dev, "property %s not found in DT, using 0\n", vreg_name);
+		vlevel[index].nominal_min = 0;
+		vlevel[index].low_power_min = 0;
+		vlevel[index].max_voltage = 0;
+	} else {
+		vlevel[index].nominal_min = voltage_levels[0];
+		vlevel[index].low_power_min = voltage_levels[1];
+		vlevel[index].max_voltage = voltage_levels[2];
 	}
-
-	vlevel[index].nominal_min = voltage_levels[0];
-	vlevel[index].low_power_min = voltage_levels[1];
-	vlevel[index].max_voltage = voltage_levels[2];
 
 	ret = of_property_read_u32(dev->of_node, current_vreg_name,
 				   &current_vreg);
 	if (ret) {
-		dev_err(dev, "error reading %s property\n", current_vreg_name);
-		return ret;
+		dev_warn(dev, "property %s not found in DT, using 0\n", current_vreg_name);
+		vlevel[index].uA_load = 0;
+	} else {
+		vlevel[index].uA_load = current_vreg;
 	}
 
-	vlevel[index].uA_load = current_vreg;
-
-	return ret;
+	return 0;
 }
 
 static int
