@@ -132,3 +132,32 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Pushed both to device `/sdcard/`.
   - Pushed `kernel-3.18-a37f-test2.zip` directly to device `/sdcard/kernel-3.18-a37f-test2.zip` via ADB.
   - Committed and pushed to GitHub: commit `42f51fdacb9`.
+
+---
+
+## Phase 7: Display Driver Hardware Diagnostics & Test 4 Fixes
+
+- **Symptom**: Phone froze at "OPPO" splash screen with Test 3.
+- **Root Causes Discovered**:
+  1. **TI TPS65132 Power Regulator Missing from 3.18 Tree**:
+     - In the device tree (`msm8916-qrd-skuh.dtsi`), the display panel (`qcom,mdss_dsi_oppo15399boe_ili9881c_720p_video`) requires `vsp-supply = <&tps65132_pos>` and `vsn-supply = <&tps65132_neg>` (LCD panel positive and negative bias rails).
+     - In the reference 3.10 tree, `CONFIG_REGULATOR_TPS65132=y` provided `drivers/regulator/tps65132-regulator.c`.
+     - In the donor 3.18 tree, `tps65132-regulator.c` was completely missing.
+     - Without this driver, the MDSS DSI panel regulator probe deferred indefinitely (`-EPROBE_DEFER`), preventing the display driver and framebuffer from initializing.
+  2. **Qualcomm 3.10 TWRP Ramoops DT Node Omission**:
+     - TWRP recovery kernel failed `ramoops_probe` (`ramoops: The memory size and the record/console size must be non-zero`) because Qualcomm's 3.10 kernel discards command-line module parameters if `pdev->dev.of_node` is null.
+     - Fixed TWRP recovery by decompiling `recovery.img`'s DTB, injecting the `ramoops` DT node (`compatible = "ramoops"` at `0x9ff00000`, 4MB), recompiling with `dtbToolOppo`, and flashing `recovery_ramoops_v2.img`.
+  3. **Missing Serial HSL Console & Android Statistics**:
+     - Cmdline specifies `console=ttyHSL0,115200,n8`. In 3.18, `CONFIG_SERIAL_MSM_HSL` was not set, so console messages were discarded.
+     - Enabled `CONFIG_SERIAL_MSM_HSL=y` and `CONFIG_SERIAL_MSM_HSL_CONSOLE=y`.
+     - Enabled `CONFIG_DEVMEM=y` without `STRICT_DEVMEM` to allow inspecting physical memory.
+     - Ported `drivers/misc/uid_cputime.c` from 3.10 and enabled `CONFIG_UID_CPUTIME=y` and `CONFIG_UID_SYS_STATS=y` for Android userspace.
+- **Fixes Applied**:
+  - Ported `drivers/regulator/tps65132-regulator.c` into 3.18, added Kconfig and Makefile targets.
+  - Enabled `CONFIG_REGULATOR_TPS65132=y` in `lineageos_a37f_defconfig`.
+  - Ported `drivers/misc/uid_cputime.c`, enabled `CONFIG_UID_CPUTIME=y` and `CONFIG_UID_SYS_STATS=y`.
+  - Enabled `CONFIG_DEVMEM=y`, `CONFIG_SERIAL_MSM_HSL=y`, `CONFIG_SERIAL_MSM_HSL_CONSOLE=y`.
+  - Cleanly rebuilt kernel `Image` (17.94MB) and master `dt.img` (206KB).
+  - Built standalone `boot-3.18-test4.img` and AnyKernel3 flashable zip `kernel-3.18-a37f-test4.zip`.
+  - Flashed `recovery_ramoops_v2.img` to `/dev/block/bootdevice/by-name/recovery`.
+  - Pushed `boot-3.18-test4.img` and `kernel-3.18-a37f-test4.zip` to device `/sdcard/`.
