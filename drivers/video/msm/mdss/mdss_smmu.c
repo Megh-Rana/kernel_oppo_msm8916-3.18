@@ -263,9 +263,9 @@ static struct dma_buf_attachment *mdss_smmu_dma_buf_attach_v2(
 		struct dma_buf *dma_buf, struct device *dev, int domain)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
-		return NULL;
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
+		return ERR_PTR(-ENODEV);
 	}
 
 	return dma_buf_attach(dma_buf, mdss_smmu->dev);
@@ -284,8 +284,8 @@ static int mdss_smmu_map_dma_buf_v2(struct dma_buf *dma_buf,
 {
 	int rc;
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
 		return -EINVAL;
 	}
 	ATRACE_BEGIN("map_buffer");
@@ -305,8 +305,8 @@ static void mdss_smmu_unmap_dma_buf_v2(struct sg_table *table, int domain,
 		int dir, struct dma_buf *dma_buf)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
 		return;
 	}
 
@@ -328,8 +328,8 @@ static int mdss_smmu_dma_alloc_coherent_v2(struct device *dev, size_t size,
 		gfp_t gfp, int domain)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
 		return -EINVAL;
 	}
 
@@ -338,8 +338,12 @@ static int mdss_smmu_dma_alloc_coherent_v2(struct device *dev, size_t size,
 		pr_err("dma alloc coherent failed!\n");
 		return -ENOMEM;
 	}
-	*phys = iommu_iova_to_phys(mdss_smmu->mmu_mapping->domain,
-			*iova);
+	if (mdss_smmu->mmu_mapping && mdss_smmu->mmu_mapping->domain) {
+		*phys = iommu_iova_to_phys(mdss_smmu->mmu_mapping->domain,
+				*iova);
+	} else {
+		*phys = *iova;
+	}
 	return 0;
 }
 
@@ -347,8 +351,8 @@ static void mdss_smmu_dma_free_coherent_v2(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t phys, dma_addr_t iova, int domain)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
 		return;
 	}
 
@@ -365,8 +369,8 @@ static int mdss_smmu_map_v2(int domain, phys_addr_t iova, phys_addr_t phys,
 		int gfp_order, int prot)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->mmu_mapping || !mdss_smmu->mmu_mapping->domain) {
+		pr_err("not able to get smmu context or domain for %d\n", domain);
 		return -EINVAL;
 	}
 
@@ -377,8 +381,8 @@ static int mdss_smmu_map_v2(int domain, phys_addr_t iova, phys_addr_t phys,
 static void mdss_smmu_unmap_v2(int domain, unsigned long iova, int gfp_order)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->mmu_mapping || !mdss_smmu->mmu_mapping->domain) {
+		pr_err("not able to get smmu context or domain for %d\n", domain);
 		return;
 	}
 
@@ -414,8 +418,8 @@ static int mdss_smmu_dsi_map_buffer_v2(phys_addr_t phys, unsigned int domain,
 		int dir)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %u\n", domain);
 		return -EINVAL;
 	}
 
@@ -431,8 +435,8 @@ static void mdss_smmu_dsi_unmap_buffer_v2(dma_addr_t dma_addr, int domain,
 		unsigned long size, int dir)
 {
 	struct mdss_smmu_client *mdss_smmu = mdss_smmu_get_cb(domain);
-	if (!mdss_smmu) {
-		pr_err("not able to get smmu context\n");
+	if (!mdss_smmu || !mdss_smmu->dev) {
+		pr_err("not able to get smmu context or dev for domain %d\n", domain);
 		return;
 	}
 
