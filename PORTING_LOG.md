@@ -356,3 +356,36 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
 
 
 
+
+
+---
+
+## Phase 14: Fix MDSS Overlay Scaler Struct Mismatch & Force Early Boot ADB (Test 15 - `1ae2422a1ac`)
+
+- **Diagnosis (from Test 14 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - With `check_not_supported_ioctl` unblocked, `MSMFB_BUFFER_SYNC` and `MSMFB_DISPLAY_COMMIT` succeeded.
+    - Software sync fences were successfully created and signaled via `/dev/sw_sync`.
+  - **Root Cause of Splash Screen Persistence**:
+    - In `console-ramoops-0`: MDSS overlay kickoff aborted on every commit:
+      `__mdss_mdp_validate_pxl_extn: roi_w[0]=538976266 src_w=720`
+      `mdss_mdp_overlay_kickoff: unable to start overlay 0 (-1)`
+    - In CAF 3.18, `pipe->scaler` was upgraded to `struct mdp_scale_data_v2` (which has a 4-byte `uint32_t enable` as its first field).
+    - `mdss_mdp_overlay.c:889` executed a raw `memcpy(&pipe->scaler, &req->scale, sizeof(struct mdp_scale_data))`.
+    - Because the legacy userspace structure `struct mdp_scale_data` begins with a 1-byte `uint8_t enable_pxl_ext`, this raw copy shifted all subsequent fields by 3 bytes and contaminated `pipe->scaler.enable` with non-zero garbage.
+    - This caused `mdss_mdp_overlay_setup_scaling` to mistakenly run `__mdss_mdp_validate_pxl_extn`, which inspected garbage `roi_w` values (`538976266 = 0x2020200A`) and failed overlay kickoff (`-1`).
+  - **Root Cause of Missing ADB**:
+    - LineageOS 17.1 has `persist.sys.usb.config=none` hardcoded in `/system/default.prop`, disabling ADB completely on boot.
+- **Fixes Applied**:
+  - In `drivers/video/msm/mdss/mdss_mdp_overlay.c`:
+    - Replaced the blind `memcpy` with `memset(&pipe->scaler, 0, sizeof(pipe->scaler));` and field-by-field copies into `mdp_scale_data_v2` only when `req->scale.enable_pxl_ext != 0`.
+  - In Ramdisk:
+    - Added `/force_debuggable` to the root directory to signal Android 10 first-stage init to force `ro.debuggable=1` and enable ADB root without key verification.
+  - In Device `/system/default.prop`:
+    - Updated `ro.secure=0`, `ro.adb.secure=0`, and `persist.sys.usb.config=mtp,adb`.
+  - In Kernel Cmdline:
+    - Added `buildvariant=eng androidboot.mode=eng androidboot.usbconfig=adb`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test15.img`.
+  - Built `boot-3.18-test15.img` (MD5: `b5e8db1419c449f70e328f58db205860`) and `kernel-3.18-a37f-test15.zip`.
+  - Pushed to `/sdcard/` and flashed to `boot` partition (MD5 verified).
