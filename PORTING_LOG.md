@@ -389,3 +389,37 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and generated `dt_test15.img`.
   - Built `boot-3.18-test15.img` (MD5: `b5e8db1419c449f70e328f58db205860`) and `kernel-3.18-a37f-test15.zip`.
   - Pushed to `/sdcard/` and flashed to `boot` partition (MD5 verified).
+
+
+---
+
+## Phase 15: Fix MDSS Overlay Compat 32-bit Struct Shift & Scaler Fallback (Test 16 - `c46057c050b`)
+
+- **Diagnosis (from Test 15 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - Kernel ran stably for **138.8 seconds (~2.3 minutes)** without panicking.
+    - Android userspace initialized key services: `time_daemon`, `vold`, `hwservicemanager`, `hwcomposer`.
+    - No kernel panic occurred.
+  - **Root Cause of Persistent `__mdss_mdp_validate_pxl_extn: roi_w[0]=538976266`**:
+    - In `console-ramoops-0`, kickoff still failed with `roi_w[0] = 538976266 = 0x2020200A` ('\n   ' in ASCII) and `v_fetch = 1750350160 = 0x68545950` ("PYTh" in ASCII).
+    - Reverse engineering `hwcomposer.msm8916.so` and `liboverlay.so` with `gdb` and comparing against Oppo 3.10 kernel source revealed the exact root cause:
+      - In 3.10 kernel headers, `struct mdp_overlay_pp_params` ended at `hist_lut_cfg` (size = 156 bytes).
+      - In 3.18 kernel headers, Qualcomm inserted `pa_v2_cfg_data` and `pcc_cfg_data` into `struct mdp_overlay_pp_params32` (size = 216 bytes, a **60-byte expansion**).
+      - The 32-bit HAL (`hwcomposer.msm8916.so`) was compiled against 3.10 headers where `scale` starts at offset `112 + 156 = 268`.
+      - But the 64-bit kernel's compat layer (`mdss_compat_utils.h`) had `struct mdp_overlay32` expecting `scale` at offset `112 + 216 = 328`.
+      - When handling `MSMFB_OVERLAY_PREPARE` and `MSMFB_OVERLAY_SET`, `copy_in_user(&ov->scale, &ov32->scale, sizeof(struct mdp_scale_data))` read **60 bytes past the end** of the userspace struct, pulling ASCII strings and garbage heap memory into `scale.enable_pxl_ext` and `scale.roi_w`.
+      - Because the garbage byte at offset 328 was `0x20` (ASCII space), `req->scale.enable_pxl_ext` became non-zero, tricking the kernel into attempting pixel extension validation with garbage `roi_w` values!
+      - Furthermore, in `__mdss_mdp_validate_pxl_extn`, returning `-EINVAL` aborted `mdss_mdp_overlay_kickoff` completely (`-1`), dropping every frame at 60 FPS and locking the display on continuous splash.
+- **Fixes Applied**:
+  - In `drivers/video/msm/mdss/mdss_compat_utils.h`:
+    - Introduced `struct mdp_overlay_pp_params_v1_32` containing only the 3.10 fields (156 bytes).
+    - Updated `struct mdp_overlay32` to use `struct mdp_overlay_pp_params_v1_32 overlay_pp_cfg;`, restoring `scale` to its exact userspace offset (268).
+  - In `drivers/video/msm/mdss/mdss_compat_utils.c`:
+    - Updated `__from_user_pp_params` and `__to_user_pp_params` to accept `struct mdp_overlay_pp_params_v1_32 *`.
+  - In `drivers/video/msm/mdss/mdss_mdp_overlay.c`:
+    - In `mdss_mdp_overlay_pipe_setup()`: Added sanity check requiring `req->scale.roi_w[0] > 0 && req->scale.roi_w[0] <= pipe->src.w` before enabling `pipe->scaler.enable`.
+    - In `mdss_mdp_overlay_setup_scaling()`: If `__mdss_mdp_validate_pxl_extn` fails for any reason, reset `pipe->scaler.enable = 0` and smoothly fall back to standard MDP phase-step scaling instead of failing overlay kickoff with `-EINVAL`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test16.img`.
+  - Built `boot-3.18-test16.img` (MD5: `2020f9740156e164a2ca5cd85e5e529d`) and `kernel-3.18-a37f-test16.zip`.
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
