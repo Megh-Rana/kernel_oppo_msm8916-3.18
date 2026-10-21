@@ -4808,21 +4808,10 @@ static int __ioctl_wait_idle(struct msm_fb_data_type *mfd, u32 cmd)
 	return ret;
 }
 
-#ifdef TARGET_HW_MDSS_MDP3
 static bool check_not_supported_ioctl(u32 cmd)
 {
 	return false;
 }
-#else
-static bool check_not_supported_ioctl(u32 cmd)
-{
-	return((cmd == MSMFB_OVERLAY_SET) || (cmd == MSMFB_OVERLAY_UNSET) ||
-		(cmd == MSMFB_OVERLAY_GET) || (cmd == MSMFB_OVERLAY_PREPARE) ||
-		(cmd == MSMFB_DISPLAY_COMMIT) || (cmd == MSMFB_OVERLAY_PLAY) ||
-		(cmd == MSMFB_BUFFER_SYNC) || (cmd == MSMFB_OVERLAY_QUEUE) ||
-		(cmd == MSMFB_NOTIFY_UPDATE));
-}
-#endif
 
 /*
  * mdss_fb_do_ioctl() - MDSS Framebuffer ioctl function
