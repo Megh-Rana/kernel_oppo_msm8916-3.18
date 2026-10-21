@@ -389,6 +389,9 @@ kgsl_mmu_map(struct kgsl_pagetable *pagetable,
 	int ret = 0;
 	int size;
 
+	if (!pagetable)
+		return -EINVAL;
+
 	if (!memdesc->gpuaddr)
 		return -EINVAL;
 	/* Only global mappings should be mapped multiple times */
@@ -468,6 +471,9 @@ kgsl_mmu_unmap(struct kgsl_pagetable *pagetable,
 		struct kgsl_memdesc *memdesc)
 {
 	uint64_t size;
+
+	if (!pagetable)
+		return -EINVAL;
 
 	if (memdesc->size == 0 || memdesc->gpuaddr == 0 ||
 		!(KGSL_MEMDESC_MAPPED & memdesc->priv))
