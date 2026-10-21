@@ -161,3 +161,30 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built standalone `boot-3.18-test4.img` and AnyKernel3 flashable zip `kernel-3.18-a37f-test4.zip`.
   - Flashed `recovery_ramoops_v2.img` to `/dev/block/bootdevice/by-name/recovery`.
   - Pushed `boot-3.18-test4.img` and `kernel-3.18-a37f-test4.zip` to device `/sdcard/`.
+
+---
+
+## Phase 8: Ramoops Crash Analysis, TLMM Pinctrl & Camera Fixes (Test 5)
+
+- **Diagnosis Breakthrough**:
+  - `recovery_ramoops_v2.img` booted with working DT ramoops and captured `dmesg-ramoops-0` (80KB) and `dmesg-ramoops-1` (110KB) up to `t = 0.549s`.
+  - Uncompressed with zlib to reveal two major blockers:
+- **Root Cause 1: Fatal Kernel Panic in Camera (`cam_ahb_clk_init`)**:
+  - At `t = 0.528s`, `msm_cam@1800000` probed `cam_ahb_clk_init`. Because the DT node lacked `bus-vectors`, `of_property_count_strings` returned `-EINVAL` (`-22`).
+  - Driver bug: Checked `if (cnt == 0)` instead of `if (cnt <= 0)`. The `-22` was treated as an unsigned integer, prompting `devm_kzalloc` to request an astronomical buffer size. This triggered `kmalloc_order` / `alloc_pages` failure (`-ENOMEM`), probe teardown freed `mdev`, and subsequent `csiphy_probe` dereferenced the NULL `mdev` pointer in `media_device_register_entity`.
+  - **Fix**: Updated `cam_hw_ops.c` to check `if (data.cnt <= 0)` and `if (cnt <= 0)`. Added safety NULL guards in `msm.c`.
+- **Root Cause 2: Complete Pinctrl Registration Failure**:
+  - At `t = 0.252s`, TLMM driver failed with:
+    ```
+    pinctrl core: pin 0 already registered on 1000000.pinctrl
+    msm-tlmm-pinctrl 1000000.pinctrl: error during pin registration
+    msm-tlmm-pinctrl 1000000.pinctrl: Couldn't register pinctrl driver
+    ```
+  - Upstream 3.18 replaced `pinctrl-msm.c` with the new Linaro driver expecting `struct msm_pinctrl_soc_data`, while `pinctrl-msm-tlmm.c` (MSM8916 TLMM) called `msm_pinctrl_probe` passing `struct msm_tlmm_desc`.
+  - This symbol collision passed wrong struct offsets to `pinctrl_register`, failing pin registration.
+  - Consequently, **every peripheral** (MDSS display, USB OTG, I2C, SPI, UART, WiFi) deferred probe (`-EPROBE_DEFER`) waiting for `1000000.pinctrl`.
+  - **Fix**: Ported 3.10's true TLMM core probe into `drivers/pinctrl/qcom/pinctrl-msm-tlmm-gp.c`, updated to 3.18 pinctrl ops (`set_mux` and multi-config `pin_config_set`), renamed to `msm_tlmm_pinctrl_probe` to resolve symbol clash, and hooked into `pinctrl-msm-tlmm.c` and `Makefile`.
+- **Artifacts Produced**:
+  - Built `Image` (17.95MB) and master `dt.img` (206KB).
+  - Built `boot-3.18-test5.img` and `kernel-3.18-a37f-test5.zip`.
+  - Pushed both to device `/sdcard/`.

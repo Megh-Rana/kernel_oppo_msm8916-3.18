@@ -74,15 +74,15 @@ int cam_ahb_clk_init(struct platform_device *pdev)
 
 	of_node = pdev->dev.of_node;
 	data.cnt = of_property_count_strings(of_node, "bus-vectors");
-	if (data.cnt == 0) {
-		pr_err("no vectors strings found in device tree, count=%d",
+	if (data.cnt <= 0) {
+		pr_debug("no vectors strings found in device tree, count=%d\n",
 			data.cnt);
 		return 0;
 	}
 
 	cnt = of_property_count_u32_elems(of_node, "qcom,bus-votes");
-	if (cnt == 0) {
-		pr_err("no vector values found in device tree, count=%d", cnt);
+	if (cnt <= 0) {
+		pr_debug("no vector values found in device tree, count=%d\n", cnt);
 		return 0;
 	}
 
