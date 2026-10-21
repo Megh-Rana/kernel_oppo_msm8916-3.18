@@ -188,3 +188,28 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `Image` (17.95MB) and master `dt.img` (206KB).
   - Built `boot-3.18-test5.img` and `kernel-3.18-a37f-test5.zip`.
   - Pushed both to device `/sdcard/`.
+
+---
+
+## Phase 9: Display Clock Probe Deferral & TWRP Simple-Bus Fix (Test 6)
+
+- **Diagnosis Breakthrough 1: Simple-Bus `soc.0` Enumeration Trap**:
+  - In `drivers/of/platform.c:of_device_make_bus_id`, DT nodes without `reg` under root `/` increment an atomic counter:
+    `magic = atomic_add_return(1, &bus_no_reg_magic);`
+    `dev_set_name(dev, "%s.%d", node->name, magic - 1);`
+  - When `ramoops` lacked `reg`, it took index `0` and bumped `/soc` to `/sys/devices/soc.1`!
+  - Android 10 userspace `init.qcom.rc` and TWRP `init.recovery.qcom.rc` both run `wait /dev/block/platform/soc.0/${ro.boot.bootdevice}`. Because it became `soc.1`, the symlink broke, `/dev/block/bootdevice/by-name/` was missing, and partition mounting failed (`Actual block device: ''`).
+  - **Fix**: Added `reg = <0x0 0x9ff00000 0x0 0x00400000>;` and named `ramoops: ramoops@9ff00000` in both recovery DTB and `msm8916-common-15399.dtsi`.
+- **Diagnosis Breakthrough 2: MDSS MDP Driver Swallowed `-EPROBE_DEFER`**:
+  - In `mdss_mdp_irq_clk_setup()` and `mdss_mdp_res_init()`, if `bus_clk` (`clk_gcc_mdss_axi_clk`) or GDSC regulator was not yet registered by `clock_gcc`, `devm_clk_get` returned `-EPROBE_DEFER` (-517).
+  - The driver hardcoded `return -EINVAL;` (-22) and left `mdata->res_init = true`.
+  - This destroyed `-EPROBE_DEFER`, causing the driver core to drop MDSS MDP from the deferred probe list forever (`probe failed with error -22`). The display never initialized and remained on the bootloader splash screen.
+  - **Fix**: Propagated actual return codes from `devm_clk_get` and `devm_regulator_get` in `mdss_mdp.c`, and reset `mdata->res_init = false` on error so deferred probe can succeed.
+- **Ramoops Robustness**:
+  - Updated `fs/pstore/ram.c` to skip `ramoops_register_dummy()` when a DT node exists, preventing zeroed cmdline arguments from hijacking ramoops.
+  - Added hung task detection (`CONFIG_DETECT_HUNG_TASK=y`, `CONFIG_DEFAULT_HUNG_TASK_TIMEOUT=30`, `CONFIG_BOOTPARAM_HUNG_TASK_PANIC=y`).
+- **Artifacts Produced**:
+  - Built `Image` (17.92MB) and master `dt.img` (206KB).
+  - Built `boot-3.18-test6.img` and `kernel-3.18-a37f-test6.zip`.
+  - Flashed `recovery_ramoops_v3.img` to recovery.
+  - Pushed `boot-3.18-test6.img` and `kernel-3.18-a37f-test6.zip` to device `/sdcard/`.

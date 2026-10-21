@@ -1633,9 +1633,11 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 
 	mdata->fs = devm_regulator_get(&mdata->pdev->dev, "vdd");
 	if (IS_ERR_OR_NULL(mdata->fs)) {
+		ret = PTR_ERR(mdata->fs);
 		mdata->fs = NULL;
-		pr_err("unable to get gdsc regulator\n");
-		return -EINVAL;
+		if (ret != -EPROBE_DEFER)
+			pr_err("unable to get gdsc regulator: ret=%d\n", ret);
+		return ret ? ret : -EINVAL;
 	}
 
 	mdata->venus = devm_regulator_get_optional(&mdata->pdev->dev,
@@ -1668,11 +1670,15 @@ static int mdss_mdp_irq_clk_setup(struct mdss_data_type *mdata)
 		return PTR_ERR(mdata->reg_bus_clt);
 	}
 
-	if (mdss_mdp_irq_clk_register(mdata, "bus_clk", MDSS_CLK_AXI) ||
-	    mdss_mdp_irq_clk_register(mdata, "iface_clk", MDSS_CLK_AHB) ||
-	    mdss_mdp_irq_clk_register(mdata, "core_clk",
-				      MDSS_CLK_MDP_CORE))
-		return -EINVAL;
+	ret = mdss_mdp_irq_clk_register(mdata, "bus_clk", MDSS_CLK_AXI);
+	if (ret)
+		return ret;
+	ret = mdss_mdp_irq_clk_register(mdata, "iface_clk", MDSS_CLK_AHB);
+	if (ret)
+		return ret;
+	ret = mdss_mdp_irq_clk_register(mdata, "core_clk", MDSS_CLK_MDP_CORE);
+	if (ret)
+		return ret;
 
 	/* lut_clk is not present on all MDSS revisions */
 	mdss_mdp_irq_clk_register(mdata, "lut_clk", MDSS_CLK_MDP_LUT);
@@ -1976,8 +1982,10 @@ static u32 mdss_mdp_res_init(struct mdss_data_type *mdata)
 	mdss_mdp_hw.irq_info->irq_ena = false;
 
 	rc = mdss_mdp_irq_clk_setup(mdata);
-	if (rc)
+	if (rc) {
+		mdata->res_init = false;
 		return rc;
+	}
 
 	mdata->hist_intr.req = 0;
 	mdata->hist_intr.curr = 0;

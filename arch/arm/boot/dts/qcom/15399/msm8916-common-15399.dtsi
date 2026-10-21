@@ -16,9 +16,10 @@
 		i2c1 = &i2c_1; /* I2C1 controller device */
 	};
 
-	ramoops {
+	ramoops: ramoops@9ff00000 {
 		compatible = "ramoops";
 		status = "okay";
+		reg = <0x0 0x9ff00000 0x0 0x00400000>;
 
 		android,ramoops-buffer-start = <0x9ff00000>;
 		android,ramoops-buffer-size = <0x400000>;

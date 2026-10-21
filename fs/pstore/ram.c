@@ -506,11 +506,13 @@ static int ramoops_probe(struct platform_device *pdev)
 	int err = -EINVAL;
 
 #ifdef CONFIG_OF
-	if (!pdata && pdev->dev.of_node) {
-		pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
-		if (!pdata)
-			return -ENOMEM;
-		pdev->dev.platform_data = pdata;
+	if (pdev->dev.of_node) {
+		if (!pdata) {
+			pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+			if (!pdata)
+				return -ENOMEM;
+			pdev->dev.platform_data = pdata;
+		}
 		ramoops_of_init(pdev);
 	}
 #endif
@@ -657,6 +659,10 @@ static struct platform_driver ramoops_driver = {
 
 static void ramoops_register_dummy(void)
 {
+#ifdef CONFIG_OF
+	if (of_find_compatible_node(NULL, NULL, "ramoops"))
+		return;
+#endif
 	if (!mem_size)
 		return;
 
@@ -668,13 +674,13 @@ static void ramoops_register_dummy(void)
 		return;
 	}
 
-	dummy_data->mem_size = mem_size;
-	dummy_data->mem_address = mem_address;
+	dummy_data->mem_size = mem_size ? mem_size : 0x400000;
+	dummy_data->mem_address = mem_address ? mem_address : 0x9ff00000;
 	dummy_data->mem_type = 0;
-	dummy_data->record_size = record_size;
-	dummy_data->console_size = ramoops_console_size;
+	dummy_data->record_size = (record_size > 4096) ? record_size : 0x40000;
+	dummy_data->console_size = (ramoops_console_size > 4096) ? ramoops_console_size : 0x200000;
 	dummy_data->ftrace_size = ramoops_ftrace_size;
-	dummy_data->pmsg_size = ramoops_pmsg_size;
+	dummy_data->pmsg_size = (ramoops_pmsg_size > 4096) ? ramoops_pmsg_size : 0x40000;
 	dummy_data->dump_oops = dump_oops;
 	/*
 	 * For backwards compatibility ramoops.ecc=1 means 16 bytes ECC
