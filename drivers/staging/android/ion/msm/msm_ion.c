@@ -488,8 +488,17 @@ static void msm_ion_get_heap_dt_data(struct device_node *node,
 
 		basep = of_get_address(pnode,  0, &size, NULL);
 		if (!basep) {
-			base = cma_get_base(dev_get_cma_area(heap->priv));
-			size = cma_get_size(dev_get_cma_area(heap->priv));
+			struct cma *cma = NULL;
+
+			if (heap->priv)
+				cma = dev_get_cma_area(heap->priv);
+			if (cma) {
+				base = cma_get_base(cma);
+				size = cma_get_size(cma);
+			} else {
+				base = 0;
+				size = 0;
+			}
 		} else {
 			base = of_translate_address(pnode, basep);
 			WARN(base == OF_BAD_ADDR, "Failed to parse DT node for heap %s\n",
