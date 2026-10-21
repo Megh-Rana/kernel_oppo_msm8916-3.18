@@ -451,3 +451,44 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and generated `dt_test17.img`.
   - Built `boot-3.18-test17.img` (MD5: `cab048f2cf6e2ecd050b6b99a79b670e`) and `kernel-3.18-a37f-test17.zip`.
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+---
+
+## Phase 17: Fix USB OTG Controller Probe & QSEECOM 3.10 32-bit Compat Ioctl Translation (Test 18 - `0222d424c7b`)
+
+- **Diagnosis (from Test 17 ramoops)**:
+  - **Milestone Confirmed**:
+    - **Zero kernel panics** and **zero kernel oopses**.
+    - MDSS SMMU context banks `mdp_0` and `mdp_1` probed and bound successfully (`iommu v2 domain[0] mapping and clk register successful!`).
+    - SurfaceFlinger initialized the Adreno 306 GPU in OpenGL ES 3.0 mode (`OpenGL ES 3.0 V@145.0 AU@`).
+    - Full Android userspace booted (Zygote, SystemServer, AudioFlinger, MediaServer, RILD, CameraProvider, Netd, Storaged, etc.).
+  - **Identified Failure 1 - USB Gadget & ADB**:
+    - `console-ramoops-0`: `msm_otg 78d9000.usb: msm_otg probe` failed with error `-22` (`-EINVAL`).
+    - In 3.10, `phy-msm-usb.c` did not require `qcom,max-nominal-sysclk-rate`. In 3.18, CAF added a mandatory read of `qcom,max-nominal-sysclk-rate` that returns `-EINVAL` if omitted from device tree.
+    - Because `msm_otg` failed probe, USB core never registered a UDC device, preventing `android_usb` from binding and preventing USB enumeration/ADB on the host PC.
+  - **Identified Failure 2 - Keymaster / QSEECOM Stall & Rescue Reboot**:
+    - `pmsg-ramoops-0` showed `android.hardware.keymaster@3.0-impl: keymaster app is not loaded, attempt number 0` followed by `Loading keymaster app failied`.
+    - Keymaster service never registered, causing `vold` and `wait_for_keymaster` to loop every second: `Waited one second for android.hardware.keymaster@3.0::IKeymasterDevice/default`.
+    - Disassembly of `libQSEEComAPI.so` (Oppo 32-bit userspace blob) revealed it calls `ioctl(fd, 0xc024970f, ...)` (`QSEECom_app_load_query`).
+    - In 3.10, `MAX_APP_NAME_SIZE` was 32 (`sizeof = 36`, ioctl command `0xc024970f`).
+    - In 3.18, Qualcomm expanded `MAX_APP_NAME_SIZE` to 64 and added `app_arch` (`sizeof = 72`, ioctl command `0xc048970f`).
+    - The 3.18 `compat_qseecom_ioctl` lacked entries for 3.10 legacy ioctls, returning `-ENOIOCTLCMD` (`ENOTTY`), preventing keymaster from loading and causing Android 10 apexd/rescue party reboot after ~60s.
+- **Fixes Applied**:
+  - In `arch/arm/boot/dts/qcom/msm8916.dtsi` (and arm64 hardlink):
+    - Added `qcom,max-nominal-sysclk-rate = <133330000>;` under `usb_otg: usb@78d9000`.
+  - In `drivers/usb/phy/phy-msm-usb.c`:
+    - Added fallback default (`133330000`) for `qcom,max-nominal-sysclk-rate` so probe does not fail with `-EINVAL` even if missing in DT.
+  - In `drivers/misc/compat_qseecom.h`:
+    - Defined legacy 3.10 compat structures `struct compat_qseecom_qseos_app_load_query_32` (size 36) and `struct compat_qseecom_load_img_req_32` (size 48).
+    - Defined 3.10 ioctl command macros:
+      - `COMPAT_QSEECOM_IOCTL_APP_LOADED_QUERY_REQ_32` (`0xc024970f`)
+      - `COMPAT_QSEECOM_IOCTL_LOAD_APP_REQ_32` (`0xc0309707`)
+      - `COMPAT_QSEECOM_IOCTL_LOAD_EXTERNAL_ELF_REQ_32` (`0xc030970d`)
+  - In `drivers/misc/compat_qseecom.c`:
+    - Implemented `compat_get_qseecom_load_img_req_32`, `compat_put_qseecom_load_img_req_32`, `compat_get_qseecom_qseos_app_load_query_32`, and `compat_put_qseecom_qseos_app_load_query_32`.
+    - Added cases in `convert_cmd` and `compat_qseecom_ioctl` to properly translate and execute these 3.10 ioctls.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test18.img`.
+  - Built `boot-3.18-test18.img` (MD5: `53f11ae90c96d6ce5fc8b0cca74b692f`) and `kernel-3.18-a37f-test18.zip` (MD5: `9a0aad8756eaf308343652c7fbdb4b87`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
