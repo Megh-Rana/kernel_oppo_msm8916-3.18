@@ -521,4 +521,29 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test19.img` (MD5: `d6dd2083a7619fbb78ed084709aeec0a`) and `kernel-3.18-a37f-test19.zip` (MD5: `d5d8a0ac8a84595ad297d85c0dcd34c6`).
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
 
+---
+
+## Phase 19: Fix MDSS PP Dither NULL Pointer Dereference Panic (Test 20 - `27196b4a1f1`)
+
+- **Diagnosis (from Test 19 live logcat and ramoops)**:
+  - **Milestone Confirmed**:
+    - ADB gadget connected live (`d443a155 device`).
+    - Full Android userspace up: Keymaster 3.0 initialized, Vold decrypted partitions, SurfaceFlinger running, Zygote initialized, SystemServer started, BootAnimation service spawned!
+  - **Identified Failure - Display Kernel Panic in `pp_dspp_setup`**:
+    - When `BootAnimation` (pid 492) and `SurfaceFlinger` began rendering the boot animation to display `fb0`, `mdss_fb0` worker called `pp_dspp_setup()`.
+    - LiveDisplay had configured dither flags (`PP_FLAGS_DIRTY_DITHER`), activating the `if (flags & PP_FLAGS_DIRTY_DITHER)` branch.
+    - In CAF 3.18, `addr = base + MDSS_MDP_REG_DSPP_DITHER_DEPTH;` was mistakenly placed inside the `else` block of `if (!pp_ops[DITHER].pp_set_config)`.
+    - Because MSM8916 uses legacy PP operations without `pp_ops[DITHER].pp_set_config`, `addr` was passed as `NULL` (`0x00000000`) into `pp_dither_config()`.
+    - `pp_dither_config()` executed `writel_relaxed(data, addr)`, writing to virtual address `0x00000000`, causing an immediate kernel NULL pointer dereference panic in `mdss_fb0` at `pp_dspp_setup+0x714`.
+    - This crash occurred the exact instant the first boot animation frame was committed, preventing the boot animation from displaying on screen and crashing into a kernel reboot!
+- **Fixes Applied**:
+  - In `drivers/video/msm/mdss/mdss_mdp_pp.c`:
+    - Moved `addr = base + MDSS_MDP_REG_DSPP_DITHER_DEPTH;` outside the `if-else` so `addr` is always initialized before `pp_dither_config()` is invoked.
+    - Added defensive NULL pointer guard inside `pp_dither_config()`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB).
+  - Built `boot-3.18-test20.img` (MD5: `42425c37899b446da8b571e96972cd64`) and `kernel-3.18-a37f-test20.zip` (MD5: `53648b6a0368dc0ae2afa7536bc1d46f`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+
 
