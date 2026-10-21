@@ -2489,7 +2489,7 @@ static int therm_get_temp(uint32_t id, enum sensor_id_type type, long *temp)
 		tsens_dev.sensor_num = id;
 		ret = tsens_get_temp(&tsens_dev, temp);
 		if (ret) {
-			pr_err("Unable to read TSENS sensor:%d\n",
+			pr_err_ratelimited("Unable to read TSENS sensor:%d\n",
 				tsens_dev.sensor_num);
 			goto get_temp_exit;
 		}
@@ -3486,7 +3486,7 @@ static void check_temp(struct work_struct *work)
 
 	ret = therm_get_temp(msm_thermal_info.sensor_id, THERM_TSENS_ID, &temp);
 	if (ret) {
-		pr_err("Unable to read TSENS sensor:%d. err:%d\n",
+		pr_err_ratelimited("Unable to read TSENS sensor:%d. err:%d\n",
 				msm_thermal_info.sensor_id, ret);
 		goto reschedule;
 	}

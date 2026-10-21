@@ -3319,13 +3319,22 @@ static int synaptics_ts_probe(
 		msleep(100);
 	}
 	
+	if (ts->client->irq <= 0 && gpio_is_valid(ts->irq_gpio)) {
+		ts->client->irq = gpio_to_irq(ts->irq_gpio);
+		TPD_ERR("synaptic: fallback gpio_to_irq is %d\n", ts->client->irq);
+	}
 	TPD_ERR("synaptic:ts->client->irq is %d\n",ts->client->irq);
-	ret = request_threaded_irq(ts->client->irq, NULL,
-				synaptics_irq_thread_fn,
-				ts->irq_flags | IRQF_ONESHOT,
-				TPD_DEVICE, ts);		
-	if(ret < 0)
-		TPD_ERR("%s request_threaded_irq ret is %d\n",__func__,ret);
+	{
+		unsigned long req_flags = IRQF_TRIGGER_FALLING | IRQF_ONESHOT;
+		if (ts->irq_flags & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_HIGH | IRQF_TRIGGER_LOW))
+			req_flags = (ts->irq_flags & IRQF_TRIGGER_MASK) | IRQF_ONESHOT;
+		ret = request_threaded_irq(ts->client->irq, NULL,
+					synaptics_irq_thread_fn,
+					req_flags,
+					TPD_DEVICE, ts);		
+		if(ret < 0)
+			TPD_ERR("%s request_threaded_irq ret is %d\n",__func__,ret);
+	}
 #endif
 	
 	if (device_create_file(&client->dev, &dev_attr_test_limit)) {            
@@ -3523,7 +3532,8 @@ static void speedup_synaptics_resume(struct work_struct *work)
 		gpio_direction_output(ts->reset_gpio, 1);	
 	}
 	
-	free_irq(ts->client->irq, ts);
+	if (ts->client->irq > 0)
+		free_irq(ts->client->irq, ts);
 	mutex_lock(&ts->mutex);			
 #ifndef TPD_USE_EINT
 	hrtimer_start(&ts->timer, ktime_set(1, 0), HRTIMER_MODE_REL);
@@ -3560,12 +3570,19 @@ static void speedup_synaptics_resume(struct work_struct *work)
 		TPD_ERR("%s: TP init failed\n", __func__);
 		goto ERR_RESUME;
 	}	
+	if (ts->client->irq <= 0 && gpio_is_valid(ts->irq_gpio))
+		ts->client->irq = gpio_to_irq(ts->irq_gpio);
+	{
+		unsigned long req_flags = IRQF_TRIGGER_FALLING | IRQF_ONESHOT;
+		if (ts->irq_flags & (IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_TRIGGER_HIGH | IRQF_TRIGGER_LOW))
+			req_flags = (ts->irq_flags & IRQF_TRIGGER_MASK) | IRQF_ONESHOT;
 		ret = request_threaded_irq(ts->client->irq, NULL,
 				synaptics_irq_thread_fn,
-				ts->irq_flags | IRQF_ONESHOT,
+				req_flags,
 				TPD_DEVICE, ts);		
-	if(ret < 0)
-		TPD_ERR("%s request_threaded_irq ret is %d\n",__func__,ret);
+		if(ret < 0)
+			TPD_ERR("%s request_threaded_irq ret is %d\n",__func__,ret);
+	}
 #endif
 	ret = synaptics_enable_interrupt(ts, 1);
 	if(ret){
