@@ -536,7 +536,13 @@ int mdss_mdp_overlay_setup_scaling(struct mdss_mdp_pipe *pipe)
 	if (pipe->scaler.enable) {
 		if (!test_bit(MDSS_CAPS_QSEED3, mdata->mdss_caps_map))
 			rc = __mdss_mdp_validate_pxl_extn(pipe);
-		return rc;
+		if (rc) {
+			pr_warn_ratelimited("pixel extension invalid (%d), falling back to standard scaling\n", rc);
+			pipe->scaler.enable = 0;
+			rc = 0;
+		} else {
+			return rc;
+		}
 	}
 
 	memset(&pipe->scaler, 0, sizeof(struct mdp_scale_data_v2));
@@ -887,7 +893,8 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	}
 
 	memset(&pipe->scaler, 0, sizeof(pipe->scaler));
-	if (req->scale.enable_pxl_ext) {
+	if (req->scale.enable_pxl_ext &&
+	    req->scale.roi_w[0] > 0 && req->scale.roi_w[0] <= pipe->src.w) {
 		pipe->scaler.enable = req->scale.enable_pxl_ext;
 		memcpy(pipe->scaler.init_phase_x, req->scale.init_phase_x,
 			sizeof(req->scale.init_phase_x));
