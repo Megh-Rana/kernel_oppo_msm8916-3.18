@@ -624,6 +624,51 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test23.img` (MD5: `31a0e1d253d4fcb4ae753539eccbd2fd`) and `kernel-3.18-a37f-test23.zip` (MD5: `9ade53520a552a8c96b9b37548437322`).
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5: `31a0e1d253d4fcb4ae753539eccbd2fd` verified on raw storage).
 
+---
+
+### Test 24 - Touchscreen IRQ Domain, Hardware Keys, TI LM3630 Backlight Driver, and MDSS Pinctrl Fixes
+- **Status**: Ready for testing on device `d443a155`.
+- **Diagnostic Findings**:
+  - **Touchscreen & Volume Buttons Inoperative (`-EINVAL` / `-22`)**:
+    - `dmesg` reported: `synaptics-s3203: speedup_synaptics_resume request_threaded_irq ret is -22`.
+    - Manually binding `gpio-keys` revealed:
+      `WARNING: irq_create_mapping(, 6b) called with NULL domain`
+      `gpio-keys soc.0:gpio_keys: Unable to claim irq 0; error -22`
+    - **Root Cause**: `CONFIG_USE_PINCTRL_IRQ=y` was present in `lineageos_a37f_defconfig`, but `config USE_PINCTRL_IRQ` was never defined in any Kconfig file on 64-bit ARM (`arch/arm64`). Kconfig silently dropped the option during configuration. Without `CONFIG_USE_PINCTRL_IRQ`, `msm_gpio` (`qcom,msm-tlmm-gp`) was never matched in `irq-msm.c`, `msm_tlmm_of_gp_irq_init()` was never called, and `ic->domain` remained `NULL`. All GPIO interrupts (touchscreen IRQ 13, volume down GPIO 108, volume up GPIO 107) failed to map.
+  - **MDSS Pinctrl Errors on Blank/Unblank**:
+    - `dmesg` reported:
+      `mdss_dsi_ctrl 1a98000.qcom,mdss_dsi: Error applying setting, reverse things back`
+      `mdss_dsi_pinctrl_set_state: can not set mdss_default pins`
+    - **Root Cause**: In `15399/msm8916-mtp-15399.dtsi`, `&pmx_mdss` and `&pmx_mdss_te` were overridden with `qcom,num-grp-pins` but without `qcom,pins`, causing `pinctrl-msm-tlmm-gp.c` to skip group creation because it requires `qcom,pins`.
+  - **Physical Display Backlight Control Missing**:
+    - The Oppo A37 (`15399`) uses a Texas Instruments LM3630 backlight driver IC on I2C bus 5 (`ti_lm3630_bl@38`).
+    - The `lm3630_bl.c` driver was missing from the 3.18 kernel tree, leaving `/sys/bus/i2c/devices/5-0038/` without a driver.
+    - `mdss_dsi_panel_bl_ctrl` never notified the LM3630 chip when backlight levels changed.
+  - **Thermal Polling Log Flood**:
+    - `msm_thermal` was polling TSENS sensor 5 every 250ms and failing (`-517`), printing 3 errors 4 times a second, flooding dmesg and wasting CPU cycles.
+- **Fixes Applied**:
+  - In `drivers/pinctrl/Kconfig`:
+    - Defined `config USE_PINCTRL_IRQ` so `CONFIG_USE_PINCTRL_IRQ=y` is preserved on `arm64`.
+  - In `drivers/input/touchscreen/synaptics_oppo/synaptics_oppo_driver_3203.c`:
+    - Added fallback `if (ts->client->irq <= 0 && gpio_is_valid(ts->irq_gpio)) ts->client->irq = gpio_to_irq(ts->irq_gpio);`.
+    - Sanitized `irq_flags` to `IRQF_TRIGGER_FALLING | IRQF_ONESHOT`.
+    - Guarded `free_irq` in `speedup_synaptics_resume` to avoid freeing an unmapped IRQ.
+  - In `arch/arm/boot/dts/qcom/15399/msm8916-mtp-15399.dtsi`:
+    - Added `qcom,pins = <&gp 97>, <&gp 25>, <&gp 98>;` to `&pmx_mdss`.
+    - Added `qcom,pins = <&gp 24>;` to `&pmx_mdss_te`.
+  - In `drivers/video/backlight/`:
+    - Ported `lm3630_bl.c` and `include/linux/platform_data/lm3630_bl.h` from downstream `kernel_oppo_msm8939`.
+    - Fixed NULL pointer dereference bug in `lm3630_bank_a_update_status` (`dev_err(pchip->dev)` when `pchip == NULL`).
+    - Added `config BACKLIGHT_LM3630` in `Kconfig` and `obj-$(CONFIG_BACKLIGHT_LM3630) += lm3630_bl.o` in `Makefile`.
+  - In `drivers/video/msm/mdss/mdss_dsi_panel.c`:
+    - Hooked `lm3630_bank_a_update_status(bl_level)` into `mdss_dsi_panel_bl_ctrl()`.
+  - In `drivers/thermal/msm_thermal.c`:
+    - Rate-limited TSENS error prints to eliminate kernel log flooding.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (17,959,960 bytes) and generated `dt_test24.img` (212,992 bytes).
+  - Built `boot-3.18-test24.img` (MD5: `a8608095f63f305f36a8535ad377849d`) and `kernel-3.18-a37f-test24.zip`.
+  - Pushed to `/sdcard/kernel-3.18-a37f-test24.zip` and flashed to raw boot partition (MD5: `a8608095f63f305f36a8535ad377849d` verified on raw storage).
+
 
 
 
