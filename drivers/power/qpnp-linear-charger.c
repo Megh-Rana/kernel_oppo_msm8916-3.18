@@ -25,6 +25,9 @@
 #include <linux/bitops.h>
 #include <linux/leds.h>
 #include <linux/debugfs.h>
+#ifdef CONFIG_MACH_OPPO
+#include <soc/oppo/oppo_project.h>
+#endif
 
 #define CREATE_MASK(NUM_BITS, POS) \
 	((unsigned char) (((1 << (NUM_BITS)) - 1) << (POS)))
@@ -2526,6 +2529,11 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 	int usb_present;
 	unsigned long flags;
 
+#ifdef CONFIG_MACH_OPPO
+	if (is_project(OPPO_15109) || is_project(OPPO_15399))
+		return IRQ_HANDLED;
+#endif
+
 	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 	pr_debug("usbin-valid triggered: %d\n", usb_present);
 
@@ -2915,6 +2923,11 @@ static int qpnp_lbc_get_irqs(struct qpnp_lbc_chip *chip, u8 subtype,
 /* Get/Set initial state of charger */
 static void determine_initial_status(struct qpnp_lbc_chip *chip)
 {
+#ifdef CONFIG_MACH_OPPO
+	if (is_project(OPPO_15109) || is_project(OPPO_15399))
+		return;
+#endif
+
 	chip->usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 	power_supply_set_present(chip->usb_psy, chip->usb_present);
 	/*
@@ -3224,6 +3237,9 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 	ktime_t kt;
 	struct qpnp_lbc_chip *chip;
 	struct power_supply *usb_psy;
+#ifdef CONFIG_MACH_OPPO
+	struct power_supply *batt_psy;
+#endif
 	int rc = 0;
 
 	usb_psy = power_supply_get_by_name("usb");
@@ -3231,6 +3247,14 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 		pr_err("usb supply not found deferring probe\n");
 		return -EPROBE_DEFER;
 	}
+
+#ifdef CONFIG_MACH_OPPO
+	batt_psy = power_supply_get_by_name("battery");
+	if (!batt_psy) {
+		pr_err("battery supply not found deferring probe\n");
+		return -EPROBE_DEFER;
+	}
+#endif
 
 	chip = devm_kzalloc(&spmi->dev, sizeof(struct qpnp_lbc_chip),
 				GFP_KERNEL);
@@ -3318,7 +3342,11 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 
 	if (chip->bat_if_base) {
 		chip->batt_present = qpnp_lbc_is_batt_present(chip);
+#ifndef CONFIG_MACH_OPPO
 		chip->batt_psy.name = "battery";
+#else
+		chip->batt_psy.name = "battery-invalid";
+#endif
 		chip->batt_psy.type = POWER_SUPPLY_TYPE_BATTERY;
 		chip->batt_psy.properties = msm_batt_power_props;
 		chip->batt_psy.num_properties =

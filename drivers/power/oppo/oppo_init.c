@@ -466,13 +466,13 @@ static int opcharger_charger_probe(struct i2c_client *client, const struct i2c_d
     rc = power_supply_register(chip->dev, &chip->batt_psy);
     if (rc < 0) {
         dev_err(&client->dev, "Couldn't register batt psy rc=%d\n", rc);
-        return rc;
+        goto fail_batt_psy;
     }
 
 	rc = opchg_regulator_init(chip);
     if (rc) {
         dev_err(&client->dev, "Couldn't initialize OPCHARGER ragulator rc=%d\n", rc);
-        return rc;
+        goto fail_regulator_init;
     }
 
     opchg_works_init(chip);
@@ -592,8 +592,11 @@ fail_stat_irq:
         gpio_free(chip->irq_gpio);
     }
 fail_opchg_hw_init:
-    power_supply_unregister(&chip->batt_psy);
     regulator_unregister(chip->otg_vreg.rdev);
+fail_regulator_init:
+    power_supply_unregister(&chip->batt_psy);
+fail_batt_psy:
+    power_supply_unregister(&chip->dc_psy);
     return rc;
 }
 
