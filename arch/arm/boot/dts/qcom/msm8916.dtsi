@@ -35,7 +35,7 @@
                                  compatible = "android,fstab";
                                  system {
                                          compatible = "android,system";
-                                         dev = "/dev/block/platform/soc.0/7824900.sdhci/by-name/system";
+                                         dev = "/dev/block/platform/soc/7824900.sdhci/by-name/system";
                                          type = "ext4";
                                          mnt_flags = "ro,barrier=1,discard";
                                          fsmgr_flags = "wait";
@@ -189,6 +189,7 @@
 		compatible = "qcom,pshold";
 		reg = <0x4ab000 0x4>,
 		      <0x193d100 0x4>;
+		reg-names = "pshold-base", "tcsr-boot-misc-detect";
 	};
 
 	qcom,mpm2-sleep-counter@4a3000 {
@@ -289,8 +290,8 @@
 
 	clock_gcc_mdss: qcom,gcc-mdss@1a98300 {
 		compatible = "qcom,gcc-mdss-8916";
-		clocks = <&mdss_dsi0_pll clk_pixel_clk_src>,
-			 <&mdss_dsi0_pll clk_byte_clk_src>;
+		clocks = <&mdss_dsi0_pll clk_dsi_pll0_pixel_clk_src>,
+			 <&mdss_dsi0_pll clk_dsi_pll0_byte_clk_src>;
 		clock-names = "pixel_src", "byte_src";
 		#clock-cells = <1>;
 	};
