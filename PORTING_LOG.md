@@ -267,3 +267,33 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and `dt_test11.img`.
   - Built `boot-3.18-test11.img` and `kernel-3.18-a37f-test11.zip`.
   - Flashed `boot-3.18-test11.img` to `boot` partition (md5sum `1811c56a92d38f96b735f285946ed4df` verified).
+
+---
+
+## Phase 11: Android Firmware Search Paths & KGSL Crash Prevention (Test 12 - `6d0862a8401`)
+
+- **Diagnosis (from Test 11 ramoops & pmsg)**:
+  - **Milestone Reached**:
+    - Second stage init executed `mount_all /vendor/etc/fstab.qcom` successfully in 1659ms (`/data`, `/cache`, `/persist` mounted cleanly).
+    - DSI panel attached and registered `FrameBuffer[0] 720x1280` (`oppo15399boe ili9881c 720p video mode dsi panel`) with continuous splash.
+    - Android reached `class_start main` and `class_start late_start`. All major Android services started: `drm`, `keystore`, `storaged`, `qcamerasvr`, `surfaceflinger`.
+  - **Panic Mechanism at `t = 28.564s`**:
+    - `surfaceflinger` (PID 344) opened `/dev/kgsl-3d0` to initialize Adreno GPU acceleration.
+    - `a3xx_microcode_read` called `_load_firmware(device, "a300_pm4.fw", &ptr, &len)`.
+    - `request_firmware("a300_pm4.fw")` failed with `-2` (`ENOENT`) because the kernel's built-in `fw_path[]` in `drivers/base/firmware_class.c` only searched desktop Linux paths (`/lib/firmware/...`), omitting Android paths (`/vendor/firmware`, `/system/vendor/firmware`, etc.).
+    - `a3xx_microcode_read` called `KGSL_DRV_FATAL(...)`, which expanded to `BUG()` in `kgsl_log.h:48`, crashing the kernel:
+      `Kernel BUG at a3xx_microcode_read+0xf0`
+      `Kernel panic - not syncing: Fatal exception`
+    - PS_HOLD restart executed 5 seconds later, rebooting the phone back to splash.
+- **Fixes Applied**:
+  - In `drivers/base/firmware_class.c`:
+    - Added Android firmware search paths (`/etc/firmware`, `/vendor/firmware`, `/system/vendor/firmware`, `/system/etc/firmware`, `/firmware/image`) directly to the static `fw_path[]` table.
+  - In `drivers/gpu/msm/adreno_a3xx.c`:
+    - Replaced `KGSL_DRV_FATAL(...)` with `KGSL_DRV_ERR(...)` on microcode read failure so GPU firmware issues log errors but never panic the kernel.
+  - In `arch/arm64/configs/lineageos_a37f_defconfig`:
+    - Enabled `CONFIG_FW_LOADER_USER_HELPER=y` and `CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test12.img`.
+  - Built `boot-3.18-test12.img` and `kernel-3.18-a37f-test12.zip`.
+  - Flashed `boot-3.18-test12.img` to `boot` partition (md5sum `7d7f7a6783284e8a4e52c275d78c3b53` verified).
+
