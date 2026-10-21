@@ -14,6 +14,7 @@
 
 #include <linux/module.h>
 #include <linux/proc_fs.h>
+#include <linux/err.h>
 #include <soc/qcom/smem.h>
 #include <soc/oppo/device_info.h>
 #include <soc/oppo/oppo_project.h>
@@ -133,12 +134,14 @@ int register_device_proc(char *name, char *version, char *manufacture)
 	return 0;
 }
 
-static void dram_type_add(void)
+static int dram_type_add(void)
 {
 	struct manufacture_info dram_info;
 	int *p = NULL;
 
 	p = (int *)smem_alloc(SMEM_ID_VENDOR2, 4, 0, 0);
+	if (IS_ERR(p))
+		return PTR_ERR(p);
 
 	if (p) {
 		switch (*p) {
@@ -168,6 +171,7 @@ static void dram_type_add(void)
 	}
 
 	register_device_proc("ddr", dram_info.version, dram_info.manufacture);
+	return 0;
 }
 
 static int get_hw_operator_version(struct devinfo_data *devinfo_data)
@@ -431,6 +435,10 @@ static int devinfo_probe(struct platform_device *pdev)
 	int ret = 0;
 	struct devinfo_data *devinfo_data = NULL;
 
+	ret = dram_type_add();
+	if (ret == -EPROBE_DEFER)
+		return -EPROBE_DEFER;
+
 	devinfo_data = kzalloc(sizeof(struct devinfo_data), GFP_KERNEL);
 	if (devinfo_data == NULL) {
 		pr_err("devinfo_data kzalloc failed\n");
@@ -444,12 +452,12 @@ static int devinfo_probe(struct platform_device *pdev)
 		parent = proc_mkdir("devinfo", NULL);
 		if (!parent) {
 			pr_err("can't create devinfo proc\n");
-			ret = -ENOENT;
+			kfree(devinfo_data);
+			return -ENOENT;
 		}
 	}
 
 	pa_verify();
-	dram_type_add();
 	mainboard_verify(devinfo_data);
 	sub_mainboard_verify(devinfo_data);
 

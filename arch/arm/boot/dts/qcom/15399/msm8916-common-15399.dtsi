@@ -29,7 +29,7 @@
 		android,ramoops-dump-oops = <0x1>;
 	};
 
-	memory {
+	reserved-memory {
 		modem_adsp_mem: modem_adsp_region@0 {
 			reg = <0x0 0x86800000 0x0 0x05500000>;
 		};
@@ -38,24 +38,18 @@
 			reg = <0x0 0x8bd00000 0x0 0x0600000>;
 		};
 
-        //the_shahnawaz_sheikh, enable ramoops_console
 		pstore_reserve_mem: pstore_reserve_region@0 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
 			reg = <0x0 0x9ff00000 0x0 0x400000>;
-			label = "pstore_reserve_mem";
+			compatible = "removed-dma-pool";
+			no-map;
 		};
 		
 		/delete-node/ secure_region@0;
 
-        //add for enlarge nv backup memory
 		nvbackup_regions: nvbackup_regions@0 {
-			linux,reserve-contiguous-region;
-			linux,reserve-region;
-			linux,remove-completely;
-			reg = <0 0x85f00000 0 0x100000>;
-			label = "memory_nvbackup";
+			reg = <0x0 0x85f00000 0x0 0x100000>;
+			compatible = "removed-dma-pool";
+			no-map;
 		};
 	};
 };

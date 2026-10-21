@@ -6,6 +6,7 @@
 #include <soc/qcom/smem.h>
 #include <soc/oppo/oppo_project.h>
 #include <linux/io.h>
+#include <linux/err.h>
 
 static struct proc_dir_entry *oppoVersion = NULL;
 static ProjectInfoCDTType *format = NULL;
@@ -13,22 +14,23 @@ static ProjectInfoCDTType *format = NULL;
 unsigned int init_project_version(void)
 {
 	unsigned int len = (sizeof(ProjectInfoCDTType) + 3) & (~0x3);
+	void *p;
 
-	format = (ProjectInfoCDTType *)smem_alloc(SMEM_ID_VENDOR1, len, 0, 0);
-	if (format)
-		return format->nProject;
-
-	return 0;
+	p = smem_alloc(SMEM_ID_VENDOR1, len, 0, 0);
+	if (IS_ERR_OR_NULL(p)) {
+		format = NULL;
+		return 0;
+	}
+	format = (ProjectInfoCDTType *)p;
+	return format->nProject;
 }
 
 unsigned int get_project(void)
 {
-	if (format)
+	if (format && !IS_ERR(format))
 		return format->nProject;
 	else
 		return init_project_version();
-
-	return 0;
 }
 
 unsigned int is_project(OPPO_PROJECT project)
@@ -38,7 +40,9 @@ unsigned int is_project(OPPO_PROJECT project)
 
 unsigned char get_PCB_Version(void)
 {
-	if (format)
+	if (format && !IS_ERR(format))
+		return format->nPCBVersion;
+	else if (init_project_version() && format)
 		return format->nPCBVersion;
 
 	return 0;
@@ -46,7 +50,9 @@ unsigned char get_PCB_Version(void)
 
 unsigned char get_Modem_Version(void)
 {
-	if (format)
+	if (format && !IS_ERR(format))
+		return format->nModem;
+	else if (init_project_version() && format)
 		return format->nModem;
 
 	return 0;
@@ -54,7 +60,9 @@ unsigned char get_Modem_Version(void)
 
 unsigned char get_Operator_Version(void)
 {
-	if (format)
+	if (format && !IS_ERR(format))
+		return format->nOperator;
+	else if (init_project_version() && format)
 		return format->nOperator;
 
 	return 0;
