@@ -545,5 +545,33 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test20.img` (MD5: `42425c37899b446da8b571e96972cd64`) and `kernel-3.18-a37f-test20.zip` (MD5: `53648b6a0368dc0ae2afa7536bc1d46f`).
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
 
+---
+
+## Phase 20: Fix MSM CPUFreq Deferred Probing & Restore CPU Frequency Scaling (Test 21 - `d0b363c9083`)
+
+- **Diagnosis (from Test 20 device testing & dropbox logs)**:
+  - **Milestone Confirmed**:
+    - Boot animation played smoothly on physical screen!
+    - Display completely bypassed Oppo splash screen and reached gray setup screen.
+    - Android reached `sys.boot_completed = 1`.
+  - **Identified Failure 1 - CPU Frequency Locked at Minimum (200 MHz)**:
+    - Boot animation stuttered and system server reported `SystemServer init took too long. uptimeMillis=84393`.
+    - At `4.807887s`, dmesg reported: `msm-cpufreq 0.qcom,msm-cpufreq: probe deferral not supported`.
+    - `qcom-cpufreq.c` was using `platform_driver_probe()`, which explicitly rejects `-EPROBE_DEFER` from `devm_clk_get(dev, clk_name)` when CPU clocks (`clock-a7`/CPR) are not yet ready.
+    - As a result, the cpufreq driver aborted permanently, leaving all four Cortex-A53 cores trapped at 200 MHz throughout the entire boot.
+  - **Identified Failure 2 - Keystore Service Timing Out Under CPU Starvation**:
+    - Under extreme CPU starvation (84+ seconds to initialize), binder IPC between `system_server` and `keystore` timed out or had not completed publishing `android.security.keystore` when `LockdownVpnTracker` and `LockSettingsService` attempted to check credentials, causing `system_server` crashes.
+- **Fixes Applied**:
+  - In `drivers/cpufreq/qcom-cpufreq.c`:
+    - Removed `__init` from `msm_cpufreq_probe` to permit asynchronous/deferred execution.
+    - Assigned `.probe = msm_cpufreq_probe` in `struct platform_driver msm_cpufreq_plat_driver`.
+    - Replaced `platform_driver_probe(&msm_cpufreq_plat_driver, msm_cpufreq_probe)` with `platform_driver_register(&msm_cpufreq_plat_driver)` to fully support deferred probing.
+    - Moved `register_pm_notifier()` and `cpufreq_register_driver()` inside `msm_cpufreq_probe()` so that cpufreq registers dynamically the moment CPU clocks become available.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB).
+  - Built `boot-3.18-test21.img` (MD5: `3cacc1ce36a7df29b24aaf90b72172ff`) and `kernel-3.18-a37f-test21.zip` (MD5: `9785a36923d033c3ab1e2ba1620c4f7b`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+
 
 
