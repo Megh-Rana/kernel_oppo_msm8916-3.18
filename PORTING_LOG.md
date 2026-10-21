@@ -174,3 +174,26 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and `dt_test8.img`.
   - Built `boot-3.18-test8.img` and `kernel-3.18-a37f-test8.zip`.
   - Flashed `boot-3.18-test8.img` to `boot` partition (md5sum `6b59b2221f4a3c73aad1da21208c9d88` verified).
+
+---
+
+## Phase 8: Modem PIL Voltage Property & NULL Safety Fix (Test 9 - `374b5e80312`)
+
+- **Diagnosis**:
+  - `console-ramoops-0` confirmed Test 8 booted past ION to `t = 4.940s`.
+  - Crash occurred during modem Hexagon PIL subsystem initialization:
+    `pil-q6v5-mss 4080000.qcom,mss: Missing vdd_cx-voltage property`
+    `Unable to handle kernel NULL pointer dereference at virtual address 00000139`
+    `PC is at pil_mss_driver_probe+0x13c/0x524`
+  - **Mechanism**:
+    - `arch/arm/boot/dts/qcom/msm8916.dtsi` node `qcom,mss@4080000` was missing `vdd_cx-voltage = <7>;`.
+    - In `drivers/soc/qcom/pil-q6v5.c`, `return ERR_CAST(prop)` returned `NULL` instead of `ERR_PTR(-EINVAL)`.
+    - `pil_mss_driver_probe` checked `if (IS_ERR_OR_NULL(q6)) return PTR_ERR(q6);`. Since `PTR_ERR(NULL)` is 0, probe continued and dereferenced `drv->q6` at `+0x139`.
+- **Fixes Applied**:
+  - Added `vdd_cx-voltage = <7>;` (`RPM_SMD_REGULATOR_LEVEL_TURBO`) to `qcom,mss@4080000` in `arch/arm/boot/dts/qcom/msm8916.dtsi`.
+  - Fixed `pil-q6v5.c` to return `ERR_PTR(-EINVAL)`.
+  - Added defensive NULL checking in `pil-q6v5-mss.c`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and `dt_test9.img`.
+  - Packaged `boot-3.18-test9.img` and `kernel-3.18-a37f-test9.zip`.
+  - Flashed `boot-3.18-test9.img` to `boot` partition (md5sum `fccc874379920ee7e0f1f3b265132202` verified).
