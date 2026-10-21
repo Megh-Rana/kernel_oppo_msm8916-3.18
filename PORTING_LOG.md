@@ -423,3 +423,31 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Recompiled kernel `Image` (18MB) and generated `dt_test16.img`.
   - Built `boot-3.18-test16.img` (MD5: `2020f9740156e164a2ca5cd85e5e529d`) and `kernel-3.18-a37f-test16.zip`.
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+---
+
+## Phase 16: Fix MDSS SMMU Context Bank Binding & NULL Guards (Test 17 - `3dbedeba50e`)
+
+- **Diagnosis (from Test 16 ramoops)**:
+  - **Milestone Confirmed**:
+    - `__mdss_mdp_validate_pxl_extn` error count: **0 occurrences** (was thousands per second).
+    - `unable to start overlay 0` error count: **0 occurrences** (was 60 FPS drops).
+    - The overlay kickoff succeeded and passed the frame into `mdss_fb0` worker for display hardware mapping.
+  - **Crash Analysis**:
+    - At `t = 59.9s`, panic occurred: `Unable to handle kernel NULL pointer dereference at virtual address 00000000` with `PC is at mdss_smmu_map_v2+0x9c/0xb0`.
+    - In CAF 3.18, `mdss_smmu_init()` calls `mdss_smmu_device_create()` which loops through child nodes of `mdss_mdp` matching prefix `qcom,smmu_` to create platform devices that trigger `mdss_smmu_probe()`.
+    - `msm8916-mdss.dtsi` was missing child nodes `smmu_mdp_unsec: qcom,smmu_mdp_unsec_cb { compatible = "qcom,smmu_mdp_unsec"; };` and `smmu_mdp_sec`.
+    - Without child nodes, no platform devices were created, `mdss_smmu_probe()` never ran for MDSS, and `mdss_smmu->mmu_mapping` and `mdss_smmu->dev` remained `NULL`.
+    - When `surfaceflinger` attempted buffer attachment, `dma_buf_attach(dmabuf, NULL)` warned at `dma-buf.c:427`.
+    - When `mdss_fb0` called `mdss_smmu_map_v2` to map the continuous splash framebuffer memory (`iova=0x83000000, size=0x1400000`), it executed `iommu_map(mdss_smmu->mmu_mapping->domain, ...)` with a `NULL` domain pointer, dereferencing `0x00000000`.
+- **Fixes Applied**:
+  - In `arch/arm/boot/dts/qcom/msm8916-mdss.dtsi` (and hardlinked arm64 include):
+    - Added context bank child nodes `smmu_mdp_unsec: qcom,smmu_mdp_unsec_cb { compatible = "qcom,smmu_mdp_unsec"; };` and `smmu_mdp_sec: qcom,smmu_mdp_sec_cb { compatible = "qcom,smmu_mdp_sec"; };` under `mdss_mdp`.
+    - On device probe, these match and attach to `mdp_0` and `mdp_1` context banks defined in `msm-iommu-v2.dtsi`.
+  - In `drivers/video/msm/mdss/mdss_smmu.c`:
+    - Added defensive `NULL` guards across `mdss_smmu_dma_buf_attach_v2`, `mdss_smmu_map_dma_buf_v2`, `mdss_smmu_unmap_dma_buf_v2`, `mdss_smmu_dma_alloc_coherent_v2`, `mdss_smmu_dma_free_coherent_v2`, `mdss_smmu_map_v2`, `mdss_smmu_unmap_v2`, `mdss_smmu_dsi_map_buffer_v2`, and `mdss_smmu_dsi_unmap_buffer_v2`.
+    - Returning `ERR_PTR(-ENODEV)` / `-EINVAL` instead of crashing on uninitialized structures.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated `dt_test17.img`.
+  - Built `boot-3.18-test17.img` (MD5: `cab048f2cf6e2ecd050b6b99a79b670e`) and `kernel-3.18-a37f-test17.zip`.
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
