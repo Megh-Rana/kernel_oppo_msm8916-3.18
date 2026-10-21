@@ -33,6 +33,7 @@
 #include <linux/platform_device.h>
 #include <linux/slab.h>
 #include <linux/compiler.h>
+#include <linux/of.h>
 #include <linux/pstore_ram.h>
 
 #define RAMOOPS_KERNMSG_HDR "===="
@@ -462,6 +463,39 @@ void notrace ramoops_console_write_buf(const char *buf, size_t size)
 	persistent_ram_write(cxt->cprz, buf, size);
 }
 
+#ifdef CONFIG_OF
+static const struct of_device_id ramoops_of_match[] = {
+	{ .compatible = "ramoops", },
+	{ },
+};
+MODULE_DEVICE_TABLE(of, ramoops_of_match);
+
+static void ramoops_of_init(struct platform_device *pdev)
+{
+	struct device_node *np = pdev->dev.of_node;
+	struct ramoops_platform_data *pdata = pdev->dev.platform_data;
+	u32 val;
+
+	if (!np || !pdata)
+		return;
+
+	if (!of_property_read_u32(np, "android,ramoops-buffer-start", &val))
+		pdata->mem_address = val;
+	if (!of_property_read_u32(np, "android,ramoops-buffer-size", &val))
+		pdata->mem_size = val;
+	if (!of_property_read_u32(np, "android,ramoops-console-size", &val))
+		pdata->console_size = val;
+	if (!of_property_read_u32(np, "android,ramoops-pmsg-size", &val))
+		pdata->pmsg_size = val;
+	if (!of_property_read_u32(np, "android,ramoops-record-size", &val))
+		pdata->record_size = val;
+	if (!of_property_read_u32(np, "android,ramoops-dump-oops", &val))
+		pdata->dump_oops = val;
+	if (!of_property_read_u32(np, "android,ramoops-ftrace-size", &val))
+		pdata->ftrace_size = val;
+}
+#endif
+
 static int ramoops_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -470,6 +504,16 @@ static int ramoops_probe(struct platform_device *pdev)
 	size_t dump_mem_sz;
 	phys_addr_t paddr;
 	int err = -EINVAL;
+
+#ifdef CONFIG_OF
+	if (!pdata && pdev->dev.of_node) {
+		pdata = devm_kzalloc(dev, sizeof(*pdata), GFP_KERNEL);
+		if (!pdata)
+			return -ENOMEM;
+		pdev->dev.platform_data = pdata;
+		ramoops_of_init(pdev);
+	}
+#endif
 
 	/* Only a single ramoops area allowed at a time, so fail extra
 	 * probes.
@@ -606,6 +650,7 @@ static struct platform_driver ramoops_driver = {
 	.remove		= __exit_p(ramoops_remove),
 	.driver		= {
 		.name	= "ramoops",
+		.of_match_table = of_match_ptr(ramoops_of_match),
 		.owner	= THIS_MODULE,
 	},
 };

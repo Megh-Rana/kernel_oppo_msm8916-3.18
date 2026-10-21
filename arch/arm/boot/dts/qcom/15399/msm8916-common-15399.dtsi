@@ -16,6 +16,18 @@
 		i2c1 = &i2c_1; /* I2C1 controller device */
 	};
 
+	ramoops {
+		compatible = "ramoops";
+		status = "okay";
+
+		android,ramoops-buffer-start = <0x9ff00000>;
+		android,ramoops-buffer-size = <0x400000>;
+		android,ramoops-console-size = <0x200000>;
+		android,ramoops-record-size = <0x40000>;
+		android,ramoops-pmsg-size = <0x40000>;
+		android,ramoops-dump-oops = <0x1>;
+	};
+
 	memory {
 		modem_adsp_mem: modem_adsp_region@0 {
 			reg = <0x0 0x86800000 0x0 0x05500000>;
