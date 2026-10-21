@@ -35,6 +35,10 @@ static long msm_led_flash_subdev_ioctl(struct v4l2_subdev *sd,
 		pr_err("fctrl NULL\n");
 		return -EINVAL;
 	}
+	if (!fctrl->func_tbl) {
+		pr_debug("%s: fctrl->func_tbl is NULL\n", __func__);
+		return (cmd == MSM_SD_SHUTDOWN || cmd == MSM_SD_NOTIFY_FREEZE) ? 0 : -ENODEV;
+	}
 	switch (cmd) {
 	case VIDIOC_MSM_SENSOR_GET_SUBDEV_ID:
 		return fctrl->func_tbl->flash_get_subdev_id(fctrl, argp);
