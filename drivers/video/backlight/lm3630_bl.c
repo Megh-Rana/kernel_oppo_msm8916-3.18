@@ -83,7 +83,7 @@ static int lm3630_chip_init(struct lm3630_chip_data *pchip)
 #ifdef CONFIG_MACH_OPPO
 	ret = regmap_write(pchip->regmap, FILTER_STR, 0x03);
 	if (ret < 0)
-		goto out;
+		dev_warn(pchip->dev, "write to FILTER_STR failed (%d), continuing\n", ret);
 #endif
 
 	/*pwm control */
@@ -394,15 +394,8 @@ int lm3630_bank_a_update_status(u32 bl_level)
 	int ret;
 	struct lm3630_chip_data *pchip = lm3630_pchip;
 
-	if (!pchip) {
-		pr_err_ratelimited("lm3630_bank_a_update_status pchip is null\n");
-		return -ENOMEM;
-	}
-
-	if (!pchip->regmap || !lm3630_pchip->regmap) {
-		pr_err("%s pchip->regmap is NULL.\n", __func__);
+	if (!pchip || !pchip->regmap)
 		return bl_level;
-	}
 
 	/* brightness 0 means disable */
 	if (!bl_level) {
@@ -433,7 +426,7 @@ out:
 static const struct regmap_config lm3630_regmap = {
 	.reg_bits = 8,
 	.val_bits = 8,
-	.max_register = REG_MAX,
+	.max_register = 0xFF,
 };
 
 #ifdef CONFIG_MACH_OPPO
@@ -507,9 +500,13 @@ static int lm3630_dt(struct device *dev, struct lm3630_platform_data *pdata)
 		pdata->pwm_period = temp_val;
 	}
 
-	pdata->bl_en_gpio = of_get_named_gpio(np, "ti,bl-enable-gpio", 0);
+	pdata->bl_en_gpio = of_get_named_gpio(np, "lm3630,bl_en-gpio", 0);
 	if (!gpio_is_valid(pdata->bl_en_gpio))
-		pr_err("%s: bl-enable-gpio not specified\n", __func__);
+		pdata->bl_en_gpio = of_get_named_gpio(np, "ti,bl-enable-gpio", 0);
+
+	pdata->chip_en_gpio = of_get_named_gpio(np, "lm3630,chip_en-gpio", 0);
+	if (!gpio_is_valid(pdata->chip_en_gpio))
+		pdata->chip_en_gpio = of_get_named_gpio(np, "ti,chip-enable-gpio", 0);
 
 	return 0;
 }
@@ -551,21 +548,26 @@ static int lm3630_probe(struct i2c_client *client,
 			     GFP_KERNEL);
 	if (!pchip)
 		return -ENOMEM;
-#ifdef CONFIG_MACH_OPPO
-	lm3630_pchip = pchip;
-#endif
 
 	pchip->pdata = pdata;
 	pchip->dev = &client->dev;
 
 #ifdef CONFIG_MACH_OPPO
-	ret = gpio_request(pdata->bl_en_gpio, "backlight_enable");
-	if (ret)
-		pr_err("request enable gpio failed, ret=%d\n", ret);
+	if (gpio_is_valid(pdata->chip_en_gpio)) {
+		ret = gpio_request_one(pdata->chip_en_gpio, GPIOF_OUT_INIT_HIGH, "lm3630_chip_en");
+		if (ret && ret != -EBUSY)
+			dev_warn(&client->dev, "chip_en gpio request failed: %d\n", ret);
+		gpio_direction_output(pdata->chip_en_gpio, 1);
+		gpio_set_value(pdata->chip_en_gpio, 1);
+		usleep_range(1000, 2000);
+	}
 
 	if (gpio_is_valid(pdata->bl_en_gpio)) {
-		gpio_set_value((pdata->bl_en_gpio), 1);
-		gpio_direction_output((pdata->bl_en_gpio), 1);
+		ret = gpio_request_one(pdata->bl_en_gpio, GPIOF_OUT_INIT_HIGH, "lm3630_bl_en");
+		if (ret && ret != -EBUSY)
+			dev_warn(&client->dev, "bl_en gpio request failed: %d\n", ret);
+		gpio_direction_output(pdata->bl_en_gpio, 1);
+		gpio_set_value(pdata->bl_en_gpio, 1);
 	}
 #endif
 
@@ -622,10 +624,10 @@ static int lm3630_probe(struct i2c_client *client,
 	dev_info(&client->dev, "LM3630 backlight register OK.\n");
 
 #ifdef CONFIG_MACH_OPPO
+	lm3630_pchip = pchip;
 	/* Always enable PWM mode */
-	regmap_update_bits(lm3630_pchip->regmap, REG_CONFIG, 0x01, 0x01);
+	regmap_update_bits(pchip->regmap, REG_CONFIG, 0x01, 0x01);
 #endif
-
 	return 0;
 
 #ifdef LM3630_BL_REGISTER
@@ -634,6 +636,9 @@ err_bl_reg:
 	lm3630_backlight_unregister(pchip);
 #endif
 err_chip_init:
+#ifdef CONFIG_MACH_OPPO
+	lm3630_pchip = NULL;
+#endif
 	return ret;
 }
 
@@ -641,6 +646,10 @@ static int lm3630_remove(struct i2c_client *client)
 {
 	int ret;
 	struct lm3630_chip_data *pchip = i2c_get_clientdata(client);
+
+#ifdef CONFIG_MACH_OPPO
+	lm3630_pchip = NULL;
+#endif
 
 	ret = regmap_write(pchip->regmap, REG_BRT_A, 0);
 	if (ret < 0)

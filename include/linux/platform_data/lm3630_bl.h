@@ -53,6 +53,7 @@ struct lm3630_platform_data {
 	unsigned int pwm_period;
 #ifdef CONFIG_MACH_OPPO
 	int bl_en_gpio;
+	int chip_en_gpio;
 #endif
 	void (*pwm_set_intensity) (int brightness, int max_brightness);
 };
