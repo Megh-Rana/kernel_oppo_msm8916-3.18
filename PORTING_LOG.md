@@ -492,3 +492,33 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test18.img` (MD5: `53f11ae90c96d6ce5fc8b0cca74b692f`) and `kernel-3.18-a37f-test18.zip` (MD5: `9a0aad8756eaf308343652c7fbdb4b87`).
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
 
+---
+
+## Phase 18: Fix Power Supply Battery Collision & Dangling `dc_psy` in Ueventd (Test 19 - `9b50a0dd1ea`)
+
+- **Diagnosis (from Test 18 ramoops)**:
+  - **Milestone Confirmed**:
+    - USB OTG probe succeeded: `msm_otg 78d9000.usb: msm_otg probe` completed and USB power supply registered.
+  - **Identified Failure - Ueventd Crash & Coldboot Timeout Reboot**:
+    - Because USB power supply existed, `opcharger_charger_probe` (Oppo BQ24196 I2C charger) progressed and registered `chip->dc_psy`.
+    - Next, `opcharger` attempted to register `chip->batt_psy` with name `"battery"`.
+    - However, `qpnp-linear-charger.c` (Qualcomm PMIC linear charger) had already registered `/class/power_supply/battery` because CAF 3.18 lacked Oppo's 3.10 `#ifdef CONFIG_MACH_OPPO` logic.
+    - `power_supply_register` for `chip->batt_psy` failed with `-EEXIST` (`-17`), logged `sysfs: cannot create duplicate filename '/class/power_supply/battery'`, and returned error from `probe()`.
+    - Driver core freed `chip` (allocated via `devm_kzalloc`), but `chip->dc_psy` was never unregistered!
+    - When userspace `ueventd` started coldboot at `t = 13.5s`, it iterated over `/sys/class/power_supply/dc` and called `power_supply_show_property`.
+    - `psy->get_property` dereferenced freed memory (`0xffffffc079b48900`), hitting an undefined instruction oops and instantly killing `ueventd`.
+    - Because `ueventd` crashed, `/dev/.coldboot_done` was never created. Android `init` timed out after 60 seconds (`wait for '/dev/.coldboot_done' timed out and took 60004ms`) and executed `InitFatalReboot()` back to bootloader/recovery.
+- **Fixes Applied**:
+  - In `drivers/power/qpnp-linear-charger.c`:
+    - Included `<soc/oppo/oppo_project.h>`.
+    - In `qpnp_lbc_main_probe`: Under `CONFIG_MACH_OPPO`, defer probe until `"battery"` power supply is registered by `opcharger`.
+    - In `qpnp_lbc_main_probe`: Name dummy PMIC supply `"battery-invalid"` under `CONFIG_MACH_OPPO` to avoid collision with `opcharger`'s primary `"battery"` device.
+    - In `qpnp_lbc_usbin_valid_irq_handler` and `determine_initial_status`: Guard against overriding charging for project `15399`.
+  - In `drivers/power/oppo/oppo_init.c`:
+    - Added error handling labels (`fail_batt_psy`, `fail_regulator_init`) to cleanly unregister `chip->dc_psy` if any subsequent probe step fails, preventing dangling sysfs pointers.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB).
+  - Built `boot-3.18-test19.img` (MD5: `d6dd2083a7619fbb78ed084709aeec0a`) and `kernel-3.18-a37f-test19.zip` (MD5: `d5d8a0ac8a84595ad297d85c0dcd34c6`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+
