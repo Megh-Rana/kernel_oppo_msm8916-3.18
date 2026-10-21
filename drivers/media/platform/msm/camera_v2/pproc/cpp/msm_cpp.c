@@ -4255,12 +4255,9 @@ static int cpp_probe(struct platform_device *pdev)
 	cpp_dev->vbif_data = &cpp_vbif;
 
 	cpp_dev->camss_cpp_base =
-		msm_camera_get_reg_base(pdev, "camss_cpp", true);
-	if (!cpp_dev->camss_cpp_base) {
-		rc = -ENOMEM;
-		pr_err("failed to get camss_cpp_base\n");
-		goto camss_cpp_base_failed;
-	}
+		msm_camera_get_reg_base(pdev, "camss_cpp", false);
+	if (!cpp_dev->camss_cpp_base)
+		pr_debug("%s: optional camss_cpp_base not found (expected on MSM8916)\n", __func__);
 
 	cpp_dev->base =
 		msm_camera_get_reg_base(pdev, "cpp", true);
@@ -4403,8 +4400,9 @@ cpp_hw_base_failed:
 vbif_base_failed:
 	msm_camera_put_reg_base(pdev, cpp_dev->base, "cpp", true);
 cpp_base_failed:
-	msm_camera_put_reg_base(pdev, cpp_dev->camss_cpp_base,
-		"camss_cpp", true);
+	if (cpp_dev->camss_cpp_base)
+		msm_camera_put_reg_base(pdev, cpp_dev->camss_cpp_base,
+			"camss_cpp", true);
 camss_cpp_base_failed:
 	kfree(cpp_dev);
 	return rc;
@@ -4438,8 +4436,9 @@ static int cpp_device_remove(struct platform_device *dev)
 	else
 		msm_isp_deinit_bandwidth_mgr(ISP_CPP);
 	msm_sd_unregister(&cpp_dev->msm_sd);
-	msm_camera_put_reg_base(dev, cpp_dev->camss_cpp_base,
-		"camss_cpp", true);
+	if (cpp_dev->camss_cpp_base)
+		msm_camera_put_reg_base(dev, cpp_dev->camss_cpp_base,
+			"camss_cpp", true);
 	msm_camera_put_reg_base(dev, cpp_dev->base, "cpp", true);
 	msm_camera_put_reg_base(dev, cpp_dev->vbif_base, "cpp_vbif", false);
 	msm_camera_put_reg_base(dev, cpp_dev->cpp_hw_base, "cpp_hw", true);
