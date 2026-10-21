@@ -572,6 +572,59 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test21.img` (MD5: `3cacc1ce36a7df29b24aaf90b72172ff`) and `kernel-3.18-a37f-test21.zip` (MD5: `9785a36923d033c3ab1e2ba1620c4f7b`).
   - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
 
+---
+
+## Phase 21: Protect LPM `sleep_disabled` Against Userspace Override (Test 22 - `a500f1fe7fb`)
+
+- **Diagnosis (from Test 21 ramoops)**:
+  - When Android reached `dev.bootcomplete=1`, `/vendor/etc/init/hw/init.qcom.power.rc` executed `write /sys/module/lpm_levels/parameters/sleep_disabled 0`.
+  - When the screen blanked, CPU idle power collapse attempted to use legacy Qualcomm Saw Power Manager (SPM).
+  - On 64-bit MSM8916, SPM is uninitialized/handled by PSCI firmware, causing `msm_spm_set_low_power_mode()` to fail with `-ENXIO`.
+  - This trapped the CPU in an endless warning loop (`drivers/power/qcom/msm-pm.c:276 msm_pm_spm_power_collapse`) repeating every 10ms until watchdog reset.
+- **Fixes Applied**:
+  - In `drivers/cpuidle/lpm-levels.c`:
+    - Enforced `sleep_disabled=1` with a parameter set handler that ignores attempts by userspace init scripts to clear it, keeping CPU idle in safe WFI states.
+    - Added probe instrumentation to `clock-a7`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB).
+  - Built `boot-3.18-test22.img` (MD5: `5c8b1adb50d1dc31ec9403f2a4bd367e`) and `kernel-3.18-a37f-test22.zip` (MD5: `d3a728ee49eba81f49bd64e6c61a1219`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5 verified).
+
+---
+
+## Phase 22: Fix MDSS PHY Regulator NULL Panic and Resolve CPU Clock / CPR Regulator Deadlock (Test 23 - `16a34157e1a`)
+
+- **Diagnosis (from Test 22 ramoops)**:
+  - **Milestone Confirmed**:
+    - LineageOS boot animation played and completed.
+    - LineageOS Welcome / Setup Wizard screen rendered and displayed on the physical display.
+    - Touchscreen active and responsive (user pressed "Continue").
+  - **Identified Failure 1 - MDSS DSI PHY Regulator NULL Pointer Dereference Panic**:
+    - When the screen timed out after ~15 seconds on the Welcome screen, SurfaceFlinger called `fb_blank` -> `mdss_fb_blank` -> `mdss_dsi_phy_disable` -> `mdss_dsi_phy_regulator_ctrl(ctrl, false)`.
+    - In `msm_mdss_io_8974.c`, `mdss_dsi_phy_regulator_disable()` executed `MIPI_OUTP(ctrl->phy_regulator_io.base + 0x018, 0x000)`.
+    - Because MSM8916 does not have a dedicated `dsi_phy_regulator` register block, `ctrl->phy_regulator_io.base` was `NULL` (`0x00000000`).
+    - This triggered an immediate kernel panic: `Unable to handle kernel NULL pointer dereference at virtual address 00000018` in `mdss_dsi_phy_regulator_ctrl+0x2c8/0x2ec`.
+  - **Identified Failure 2 - CPU Clock and Regulator Deadlock (200 MHz Lock & UI Lag)**:
+    - `clock-a7` probe logs showed `devm_regulator_get(cpu-vdd) failed: -517` retrying indefinitely up to 139+ seconds.
+    - `cpu-vdd` (`apc_vreg_corner`) is managed by `cpr-regulator`, which requires `vdd-apc` (`pm8916_s2`).
+    - `pm8916_s2` is managed by `spm-regulator`. In `spm_regulator_probe()`, it called `msm_spm_probe_done()`, which returned `-EPROBE_DEFER` because the `system-l2` SPM node in `msm8916-pm.dtsi` used `qcom,cpu-vctl-mask = <0xf>` instead of `qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>`, causing `cpu_vctl_device` to never bind for any CPU.
+- **Fixes Applied**:
+  - In `drivers/video/msm/mdss/msm_mdss_io_8974.c`:
+    - Added defensive NULL pointer guards to `mdss_dsi_phy_regulator_disable()`, `mdss_dsi_28nm_phy_regulator_enable()`, and `mdss_dsi_20nm_phy_regulator_enable()`.
+  - In `arch/arm/boot/dts/qcom/msm8916-regulator.dtsi`:
+    - Added `qcom,bypass-spm;` to `pm8916_s2: spm-regulator@1700` so that SMPS2 voltage is directly controlled via SPMI without blocking on 32-bit legacy SAW SPM.
+  - In `arch/arm/boot/dts/qcom/msm8916-pm.dtsi`:
+    - Added `qcom,cpu-vctl-list = <&CPU0 &CPU1 &CPU2 &CPU3>;` to `qcom,spm@b012000`.
+  - In `drivers/soc/qcom/spm_devices.c`:
+    - Added support for `qcom,cpu-vctl-mask` in `get_cpumask()` and `qcom,core-id` in `get_cpu_id()`.
+  - In `drivers/regulator/spm-regulator.c` and `drivers/regulator/cpr-regulator.c`:
+    - Added comprehensive probe and registration diagnostics.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (18MB) and generated new `dt_test23.img` (208KB) using `dtbToolOppo`.
+  - Built `boot-3.18-test23.img` (MD5: `31a0e1d253d4fcb4ae753539eccbd2fd`) and `kernel-3.18-a37f-test23.zip` (MD5: `9ade53520a552a8c96b9b37548437322`).
+  - Pushed to `/sdcard/` and flashed to raw `boot` partition (MD5: `31a0e1d253d4fcb4ae753539eccbd2fd` verified on raw storage).
+
+
 
 
 
