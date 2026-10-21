@@ -98,5 +98,37 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Backported OF device tree support into `fs/pstore/ram.c` from 3.10 and added the `ramoops` DT node to `arch/arm/boot/dts/qcom/15399/msm8916-common-15399.dtsi` at `0x9ff00000` (4MB).
   - Rebuilt kernel `Image` and master `dt.img`.
   - Built standalone `boot-3.18-test2.img` (QCDT v0 format with original ramdisk) and flashable zip `kernel-3.18-a37f-test2.zip`.
+
+---
+
+## Phase 6: Deep Root Cause Analysis & Test 3 Fixes
+
+- **Symptom**: Phone froze at "OPPO" splash screen with Test 2.
+- **Root Causes Discovered**:
+  1. **Corrupted Kernel Header (`CONFIG_EFI=y`)**:
+     - The donor CAF 3.18 tree had `CONFIG_EFI` default to `y`.
+     - In ARM64 `head.S`, when `CONFIG_EFI` is enabled, the first instruction is `add x13, x18, #0x16` (forming the PE/COFF "MZ" magic signature) instead of `b stext`, and `stext` is padded out to 4096 bytes with PE/COFF header tables.
+     - Little Kernel (LK / `aboot`) on MSM8916 does not use UEFI; it performs `scm_elexec_call` expecting standard ARM64 Linux entry format (`b stext` at offset 0, and `stext` at 0x40).
+  2. **Entire PMIC / SPMI Subsystem Was Missing**:
+     - In Linux 3.10, the Qualcomm PMIC arbiter lived under upstream `CONFIG_SPMI=y` and `CONFIG_SPMI_MSM_PMIC_ARB=y`.
+     - In CAF 3.18, Qualcomm moved their driver to `CONFIG_MSM_SPMI=y` and `CONFIG_MSM_SPMI_PMIC_ARB=y`.
+     - Because `lineageos_a37f_defconfig` carried the 3.10 symbol names, `CONFIG_MSM_SPMI` was disabled.
+     - Consequently, `OF_SPMI` and `MSM_QPNP_INT` were dropped, which silently disabled ALL PM8916 drivers:
+       - `CONFIG_REGULATOR_QPNP` (no LDOs or buck regulators!)
+       - `CONFIG_GPIO_QPNP_PIN` (no PMIC GPIOs!)
+       - `CONFIG_RTC_DRV_QPNP` (no PMIC RTC!)
+       - `CONFIG_QPNP_POWER_ON` (no power-on key handling!)
+       - `CONFIG_LEDS_QPNP`
+     - Without SPMI and PMIC regulators, early SoC power domains failed to initialize and halted boot.
+- **Fixes Applied**:
+  - Disabled `CONFIG_EFI`, `CONFIG_EFI_STUB`, and `CONFIG_EFI_ARMSTUB` in `lineageos_a37f_defconfig`.
+  - Verified hex layout of `arch/arm64/boot/Image`: byte 0 is now `10 00 00 14` (`b stext`) with `ARM\x64` at offset 0x38, exactly matching stock 3.10.
+  - Enabled `CONFIG_MSM_SPMI=y`, `CONFIG_MSM_SPMI_PMIC_ARB=y`, `CONFIG_MSM_SPMI_DEBUGFS_RO=y`, and `CONFIG_MSM_QPNP_INT=y`.
+  - Disabled conflicting upstream `CONFIG_SPMI`.
+  - Added `static inline` specifiers to stub functions in `include/linux/qpnp/power-on.h`.
+  - Successfully recompiled `Image` (with all PMIC regulators, SPMI, and ARMv8 deprecation emulation linked).
+  - Regenerated master `dt.img` with `dtbToolOppo` matching chipsets 206, 248, 249, 250 with `oppoId: 15399`.
+  - Packaged `kernel-3.18-a37f-test3.zip` and built `boot-3.18-test3.img`.
+  - Pushed both to device `/sdcard/`.
   - Pushed `kernel-3.18-a37f-test2.zip` directly to device `/sdcard/kernel-3.18-a37f-test2.zip` via ADB.
   - Committed and pushed to GitHub: commit `42f51fdacb9`.
