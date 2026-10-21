@@ -669,6 +669,36 @@ Base Reference: LineageOS Oppo MSM8939 3.10 tree (`kernel_oppo_msm8939`, Linux 3
   - Built `boot-3.18-test24.img` (MD5: `a8608095f63f305f36a8535ad377849d`) and `kernel-3.18-a37f-test24.zip`.
   - Pushed to `/sdcard/kernel-3.18-a37f-test24.zip` and flashed to raw boot partition (MD5: `a8608095f63f305f36a8535ad377849d` verified on raw storage).
 
+---
+
+## Phase 23: Fix TI LM3630 Backlight Driver Probe, Regmap Bounds, and Pointer Safety (Test 25 - `4ff7e255903`)
+
+- **Diagnostic Findings**:
+  - In Test 24, `lm3630_bl` probe failed with `-EIO` (`-5`) because `lm3630_regmap.max_register` was set to `0x1F` while `lm3630_chip_init()` wrote to `FILTER_STR` (`0x50`), causing regmap to reject the write.
+  - `lm3630_pchip = pchip;` was assigned before probe succeeded. When probe failed and deallocated memory, `lm3630_pchip` was left as a dangling pointer.
+  - When Android's lights HAL (`android.hardware.light@2.0-service`) wrote to `/sys/class/leds/lcd-backlight/brightness`, `lm3630_bank_a_update_status` dereferenced `pchip->regmap` and panicked.
+  - In addition, GPIO 69 (`ti,bl-enable-gpio`) failed to re-request if previously claimed.
+- **Fixes Applied**:
+  - In `drivers/video/backlight/lm3630_bl.c`:
+    - Set `lm3630_regmap.max_register = 0xFF` so all 8-bit registers can be accessed.
+    - In `lm3630_chip_init()`, made the write to `FILTER_STR` non-fatal (`dev_warn`).
+    - Handled `chip_en_gpio` and `bl_en_gpio` with `-EBUSY` non-fatal check.
+    - Assigned `lm3630_pchip = pchip;` only upon successful probe completion; cleared to `NULL` on error or device remove.
+    - Added defensive NULL guard in `lm3630_bank_a_update_status()`: `if (!pchip || !pchip->regmap) return bl_level;`.
+- **Packaging & Deployment**:
+  - Recompiled kernel `Image` (17,959,960 bytes) and generated `dt_test25.img` (212,992 bytes).
+  - Built `boot-3.18-test25.img` (MD5: `b1143d003da0a88cd5ced200e596466d`) and `kernel-3.18-a37f-test25.zip`.
+  - Flashed to `/dev/block/bootdevice/by-name/boot` and verified MD5 checksum (`b1143d003da0a88cd5ced200e596466d`).
+- **Verification on Live Device**:
+  - Kernel booted: `Linux localhost 3.18.140-lineageos-ge6b3fd1bedb-dirty #27`.
+  - `lm3630_bl` successfully probed and bound to I2C device `5-0038` (`/sys/bus/i2c/devices/5-0038/driver -> lm3630_bl`).
+  - `/sys/class/leds/lcd-backlight` brightness control verified without panics.
+  - All input devices active in Android:
+    - Touchscreen `synaptics-s3203` (`/dev/input/event1`, IRQ 105) actively receiving hardware interrupts.
+    - Hardware keys `qpnp_pon` (Power) and `gpio-keys` (Volume Up/Down) registered.
+  - System performance: CPU governor scaled to 1.0 GHz, all 4 cores active, ~1 GB RAM free, system responsive.
+
+
 
 
 
