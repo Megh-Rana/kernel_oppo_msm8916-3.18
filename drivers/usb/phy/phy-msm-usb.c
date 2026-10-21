@@ -4394,12 +4394,11 @@ static int msm_otg_probe(struct platform_device *pdev)
 	 */
 	if (of_property_read_u32(pdev->dev.of_node,
 					"qcom,max-nominal-sysclk-rate", &ret)) {
-		ret = -EINVAL;
-		goto put_core_clk;
-	} else {
-		motg->core_clk_nominal_rate = clk_round_rate(motg->core_clk,
-							     ret);
+		dev_dbg(&pdev->dev, "core_clk max nominal rate not specified, using default\n");
+		ret = 133330000;
 	}
+	motg->core_clk_nominal_rate = clk_round_rate(motg->core_clk,
+						     ret);
 
 	if (of_property_read_u32(pdev->dev.of_node,
 					"qcom,max-svs-sysclk-rate", &ret)) {
