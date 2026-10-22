@@ -213,8 +213,10 @@ static inline bool is_permission_fault(unsigned int esr, struct pt_regs *regs)
 	if (system_uses_ttbr0_pan())
 		return fsc_type == ESR_ELx_FSC_FAULT &&
 			(regs->pstate & PSR_PAN_BIT);
-	else
+	else if (cpus_have_cap(ARM64_HAS_PAN))
 		return fsc_type == ESR_ELx_FSC_PERM;
+	else
+		return false;
 }
 
 static bool is_el0_instruction_abort(unsigned int esr)

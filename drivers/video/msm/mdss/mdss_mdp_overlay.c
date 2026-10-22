@@ -258,7 +258,7 @@ int mdss_mdp_overlay_req_check(struct msm_fb_data_type *mfd,
 	 * Cursor overlays are only supported for targets
 	 * with dedicated cursors within VP
 	 */
-	if ((req->pipe_type == MDSS_MDP_PIPE_TYPE_CURSOR) &&
+	if ((req->pipe_type == PIPE_TYPE_CURSOR) &&
 		((req->z_order != HW_CURSOR_STAGE(mdata)) ||
 		 !mdata->ncursor_pipes ||
 		 (req->src_rect.w > mdata->max_cursor_size))) {

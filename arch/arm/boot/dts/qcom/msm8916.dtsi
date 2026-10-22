@@ -942,6 +942,13 @@
 		qcom,latency-level = "ultra";
 	};
 
+	pcm2: qcom,msm-ultra-low-latency {
+		compatible = "qcom,msm-pcm-dsp";
+		qcom,msm-pcm-dsp-id = <2>;
+		qcom,msm-pcm-low-latency;
+		qcom,latency-level = "ultra";
+	};
+
 	lpa: qcom,msm-pcm-lpa {
 		compatible = "qcom,msm-pcm-lpa";
 	};

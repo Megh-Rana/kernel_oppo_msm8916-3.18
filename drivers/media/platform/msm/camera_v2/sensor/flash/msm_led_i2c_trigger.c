@@ -428,7 +428,7 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
 		return -EINVAL;
 	}
 
-	fctrl->flashdata = kzalloc(sizeof(fctrl->flashdata),
+	fctrl->flashdata = kzalloc(sizeof(struct msm_camera_sensor_board_info),
 				GFP_KERNEL);
 	if (!fctrl->flashdata)
 		return -ENOMEM;
