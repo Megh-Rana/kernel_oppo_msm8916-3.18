@@ -348,21 +348,28 @@ static int msm_flash_lm3642_platform_probe(struct platform_device *pdev)
 	LM3642_DBG("%s of_match_device success\n", __func__);
 
 	rc = msm_flash_probe(pdev, match->data);
+	if (rc)
+		return rc;
 
-	power_info = &fctrl.flashdata->power_info;
-	rc = msm_camera_request_gpio_table(
-			power_info->gpio_conf->cam_gpio_req_tbl,
-			power_info->gpio_conf->cam_gpio_req_tbl_size, 1);
-	if (rc < 0)
-		pr_err("%s: request gpio failed\n", __func__);
+	if (fctrl.flashdata) {
+		power_info = &fctrl.flashdata->power_info;
+		if (power_info && power_info->gpio_conf) {
+			rc = msm_camera_request_gpio_table(
+					power_info->gpio_conf->cam_gpio_req_tbl,
+					power_info->gpio_conf->cam_gpio_req_tbl_size, 1);
+			if (rc < 0)
+				pr_err("%s: request gpio failed\n", __func__);
 
-	rc = msm_camera_request_gpio_table(
-			power_info->gpio_conf->cam_gpio_req_tbl,
-			power_info->gpio_conf->cam_gpio_req_tbl_size, 0);
-	if (rc < 0)
-		pr_err("%s: request gpio failed\n", __func__);
+			rc = msm_camera_request_gpio_table(
+					power_info->gpio_conf->cam_gpio_req_tbl,
+					power_info->gpio_conf->cam_gpio_req_tbl_size, 0);
+			if (rc < 0)
+				pr_err("%s: request gpio failed\n", __func__);
+		}
+	}
 
-	return rc;
+	msm_lm3642_torch_create_classdev(&(pdev->dev), NULL);
+	return 0;
 }
 
 static struct platform_driver lm3642_platform_driver =

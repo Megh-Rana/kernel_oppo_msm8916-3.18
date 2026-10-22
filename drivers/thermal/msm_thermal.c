@@ -1426,6 +1426,18 @@ static int get_cpu_freq_plan_len(int cpu)
 {
 	int table_len = 0;
 	struct device *cpu_dev = NULL;
+	struct cpufreq_frequency_table *table = NULL;
+
+	table = cpufreq_frequency_get_table(cpu);
+	if (table) {
+		int i = 0;
+		while (table[i].frequency != CPUFREQ_TABLE_END) {
+			if (table[i].frequency != CPUFREQ_ENTRY_INVALID)
+				table_len++;
+			i++;
+		}
+		return table_len;
+	}
 
 	cpu_dev = get_cpu_device(cpu);
 	if (!cpu_dev) {
@@ -1436,7 +1448,7 @@ static int get_cpu_freq_plan_len(int cpu)
 	rcu_read_lock();
 	table_len = dev_pm_opp_get_opp_count(cpu_dev);
 	if (table_len <= 0) {
-		pr_err("Error reading CPU%d freq table len. error:%d\n",
+		pr_err_ratelimited("Error reading CPU%d freq table len. error:%d\n",
 			cpu, table_len);
 		table_len = 0;
 		goto unlock_and_exit;
@@ -1456,6 +1468,24 @@ static int get_cpu_freq_plan(int cpu,
 	struct dev_pm_opp *opp = NULL;
 	unsigned long freq = 0;
 	struct device *cpu_dev = NULL;
+	struct cpufreq_frequency_table *table = NULL;
+
+	table = cpufreq_frequency_get_table(cpu);
+	if (table) {
+		int i = 0;
+		while (table[i].frequency != CPUFREQ_TABLE_END) {
+			if (table[i].frequency != CPUFREQ_ENTRY_INVALID) {
+				freq_table_ptr[table_len].frequency = table[i].frequency;
+				freq_table_ptr[table_len].flags = table[i].flags;
+				freq_table_ptr[table_len].driver_data = table[i].driver_data;
+				pr_debug("cpu%d freq %d :%d\n", cpu, table_len,
+					freq_table_ptr[table_len].frequency);
+				table_len++;
+			}
+			i++;
+		}
+		return table_len;
+	}
 
 	cpu_dev = get_cpu_device(cpu);
 	if (!cpu_dev) {

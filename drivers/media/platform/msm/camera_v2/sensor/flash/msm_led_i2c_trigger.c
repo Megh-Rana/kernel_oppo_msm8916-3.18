@@ -171,6 +171,10 @@ int msm_flash_led_init(struct msm_led_flash_ctrl_t *fctrl)
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 	fctrl->led_state = MSM_CAMERA_LED_RELEASE;
 	if (power_info->gpio_conf->cam_gpiomux_conf_tbl != NULL)
@@ -247,6 +251,10 @@ int msm_flash_led_release(struct msm_led_flash_ctrl_t *fctrl)
 		return -EINVAL;
 	}
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 
 	if (fctrl->led_state != MSM_CAMERA_LED_INIT) {
@@ -308,6 +316,10 @@ int msm_flash_led_off(struct msm_led_flash_ctrl_t *fctrl)
 		return -EINVAL;
 	}
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 	CDBG("%s:%d called\n", __func__, __LINE__);
 	if (fctrl->flash_i2c_client && fctrl->reg_setting) {
@@ -334,6 +346,10 @@ int msm_flash_led_low(struct msm_led_flash_ctrl_t *fctrl)
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 	gpio_set_value_cansleep(
 		power_info->gpio_conf->gpio_num_info->
@@ -366,6 +382,10 @@ int msm_flash_led_high(struct msm_led_flash_ctrl_t *fctrl)
 	CDBG("%s:%d called\n", __func__, __LINE__);
 
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 	gpio_set_value_cansleep(
 		power_info->gpio_conf->gpio_num_info->
@@ -414,6 +434,10 @@ static int32_t msm_led_get_dt_data(struct device_node *of_node,
 		return -ENOMEM;
 
 	flashdata = fctrl->flashdata;
+	if (!flashdata) {
+		pr_debug("%s:%d flashdata NULL\n", __func__, __LINE__);
+		return 0;
+	}
 	power_info = &flashdata->power_info;
 
 	rc = of_property_read_u32(of_node, "cell-index", &fctrl->subdev_id);
