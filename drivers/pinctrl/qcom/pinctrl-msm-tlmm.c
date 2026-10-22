@@ -473,6 +473,9 @@ static int msm_tlmm_gp_cfg(uint pin_no, unsigned long *config,
 			data = inout_val;
 		}
 		break;
+	case PIN_CONFIG_INPUT_DEBOUNCE:
+		/* Not supported by TLMM GP hardware; treat as no-op */
+		return 0;
 
 	default:
 		return -EINVAL;

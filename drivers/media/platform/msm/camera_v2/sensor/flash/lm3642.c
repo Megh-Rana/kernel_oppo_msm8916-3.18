@@ -13,6 +13,8 @@
 #include <linux/module.h>
 #include <linux/export.h>
 #include "msm_camera_io_util.h"
+#include "msm_camera_dt_util.h"
+#include "msm_cci.h"
 #include "msm_led_flash.h"
 
 #define FLASH_NAME "ti,lm3642"
@@ -78,15 +80,27 @@ static const struct i2c_device_id lm3642_i2c_id[] = {
 	{ }
 };
 
+static bool lm3642_torch_powered_up;
+
 static void msm_led_torch_brightness_set(struct led_classdev *led_cdev,
 				enum led_brightness value)
 {
 	if (value > LED_OFF) {
+		if (fctrl.flashdata && !lm3642_torch_powered_up) {
+			if (msm_camera_power_up(&fctrl.flashdata->power_info,
+				fctrl.flash_device_type, fctrl.flash_i2c_client) == 0)
+				lm3642_torch_powered_up = true;
+		}
 		if(fctrl.func_tbl->flash_led_low)
 			fctrl.func_tbl->flash_led_low(&fctrl);
 	} else {
 		if(fctrl.func_tbl->flash_led_off)
 			fctrl.func_tbl->flash_led_off(&fctrl);
+		if (fctrl.flashdata && lm3642_torch_powered_up) {
+			msm_camera_power_down(&fctrl.flashdata->power_info,
+				fctrl.flash_device_type, fctrl.flash_i2c_client);
+			lm3642_torch_powered_up = false;
+		}
 	}
 };
 

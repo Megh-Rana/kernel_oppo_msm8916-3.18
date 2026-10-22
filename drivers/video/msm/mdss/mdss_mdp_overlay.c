@@ -672,6 +672,9 @@ int mdss_mdp_overlay_pipe_setup(struct msm_fb_data_type *mfd,
 	if (ret)
 		return ret;
 
+	if ((req->pipe_type == PIPE_TYPE_CURSOR) && !mdata->ncursor_pipes)
+		req->pipe_type = PIPE_TYPE_AUTO;
+
 	ret = mdss_mdp_overlay_req_check(mfd, req, fmt);
 	if (ret)
 		return ret;

@@ -1664,6 +1664,7 @@
 		qcom,pas-id = <9>;
 		qcom,proxy-timeout-ms = <100>;
 		qcom,firmware-name = "venus";
+		memory-region = <&venus_qseecom_mem>;
 		linux,contiguous-region = <&venus_qseecom_mem>;
 	};
 
@@ -1756,10 +1757,12 @@
 
 		/* GPIO output to mss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_1_out 0 0>;
+		memory-region = <&modem_adsp_mem>;
 		linux,contiguous-region = <&modem_adsp_mem>;
 
 		mba_mss: qcom,mba-mem@0 {
 			compatible = "qcom,pil-mba-mem";
+			memory-region = <&mba_mem>;
 			linux,contiguous-region = <&mba_mem>;
 		};
 	};
@@ -1888,6 +1891,7 @@
 
 		/* GPIO output to wcnss */
 		qcom,gpio-force-stop = <&smp2pgpio_ssr_smp2p_4_out 0 0>;
+		memory-region = <&peripheral_mem>;
 		linux,contiguous-region = <&peripheral_mem>;
 	};
 
