@@ -4254,10 +4254,10 @@ static int cpp_probe(struct platform_device *pdev)
 	memset(&cpp_vbif, 0, sizeof(struct msm_cpp_vbif_data));
 	cpp_dev->vbif_data = &cpp_vbif;
 
-	cpp_dev->camss_cpp_base =
-		msm_camera_get_reg_base(pdev, "camss_cpp", false);
-	if (!cpp_dev->camss_cpp_base)
-		pr_debug("%s: optional camss_cpp_base not found (expected on MSM8916)\n", __func__);
+	if (platform_get_resource_byname(pdev, IORESOURCE_MEM, "camss_cpp"))
+		cpp_dev->camss_cpp_base = msm_camera_get_reg_base(pdev, "camss_cpp", false);
+	else
+		cpp_dev->camss_cpp_base = NULL;
 
 	cpp_dev->base =
 		msm_camera_get_reg_base(pdev, "cpp", true);

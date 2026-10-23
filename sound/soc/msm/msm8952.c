@@ -2870,19 +2870,22 @@ static void msm8952_dt_parse_cap_info(struct platform_device *pdev,
 static int msm8952_populate_dai_link_component_of_node(
 		struct snd_soc_card *card)
 {
-	int i, index, ret = 0;
+	int i, j, index, ret = 0;
 	struct device *cdev = card->dev;
 	struct snd_soc_dai_link *dai_link = card->dai_link;
 	struct device_node *phandle;
+	int total_links = card->num_links;
 
 	if (!cdev) {
 		pr_err("%s: Sound card device memory NULL\n", __func__);
 		return -ENODEV;
 	}
 
-	for (i = 0; i < card->num_links; i++) {
-		if (dai_link[i].platform_of_node && dai_link[i].cpu_of_node)
+	for (i = 0, j = 0; i < total_links; i++) {
+		if (dai_link[i].platform_of_node && dai_link[i].cpu_of_node) {
+			dai_link[j++] = dai_link[i];
 			continue;
+		}
 
 		/* populate platform_of_node for snd card dai links */
 		if (dai_link[i].platform_name &&
@@ -2915,8 +2918,14 @@ cpu_dai:
 			index = of_property_match_string(cdev->of_node,
 					"asoc-cpu-names",
 					dai_link[i].cpu_dai_name);
-			if (index < 0)
+			if (index < 0) {
+				if (!strncmp(dai_link[i].cpu_dai_name, "msm-dai-q6-", 11)) {
+					pr_warn("%s: cpu dai %s not in DT, skipping link %s\n",
+						__func__, dai_link[i].cpu_dai_name, dai_link[i].name);
+					continue;
+				}
 				goto codec_dai;
+			}
 			phandle = of_parse_phandle(cdev->of_node, "asoc-cpu",
 					index);
 			if (!phandle) {
@@ -2934,8 +2943,18 @@ codec_dai:
 			index = of_property_match_string(cdev->of_node,
 					"asoc-codec-names",
 					dai_link[i].codec_name);
-			if (index < 0)
+			if (index < 0 && !strcmp(dai_link[i].codec_name, "cajon_codec")) {
+				index = of_property_match_string(cdev->of_node,
+						"asoc-codec-names",
+						"tombak_codec");
+			}
+			if (index < 0) {
+				if (!strcmp(dai_link[i].codec_name, "snd-soc-dummy"))
+					goto keep_link;
+				pr_warn("%s: codec %s not in DT, skipping link %s\n",
+					__func__, dai_link[i].codec_name, dai_link[i].name);
 				continue;
+			}
 			phandle = of_parse_phandle(cdev->of_node, "asoc-codec",
 					index);
 			if (!phandle) {
@@ -2947,7 +2966,11 @@ codec_dai:
 			dai_link[i].codec_of_node = phandle;
 			dai_link[i].codec_name = NULL;
 		}
+keep_link:
+		dai_link[j++] = dai_link[i];
 	}
+	card->num_links = j;
+	return 0;
 err:
 	return ret;
 }
@@ -3038,7 +3061,8 @@ static struct snd_soc_card *msm8952_populate_sndcard_dailinks(
 		memcpy(dailink + len1, msm8952_hdmi_dba_dai_link,
 				sizeof(msm8952_hdmi_dba_dai_link));
 		len1 += ARRAY_SIZE(msm8952_hdmi_dba_dai_link);
-	} else {
+	} else if (of_property_match_string(dev->of_node, "asoc-cpu-names",
+					    "msm-dai-q6-mi2s.5") >= 0) {
 		dev_dbg(dev, "%s(): No hdmi dba present, add quin dai\n",
 				__func__);
 		memcpy(dailink + len1, msm8952_quin_dai_link,

@@ -198,8 +198,15 @@ int msm_cpp_read_payload_params_from_dt(struct cpp_device *cpp_dev)
 	dev_node = pdev->dev.of_node;
 	fw_info_node = of_find_node_by_name(dev_node, key);
 	if (!fw_info_node) {
-		ret = -ENODEV;
-		goto no_binding;
+		payload_params = &cpp_dev->payload_params;
+		memset(payload_params, 0x0, sizeof(struct msm_cpp_payload_params));
+		payload_params->stripe_base = 156;
+		payload_params->plane_base = 141;
+		payload_params->stripe_size = 27;
+		payload_params->plane_size = 5;
+		payload_params->rd_pntr_off = 5;
+		payload_params->wr_0_pntr_off = 11;
+		return 0;
 	}
 	payload_params = &cpp_dev->payload_params;
 	memset(payload_params, 0x0, sizeof(struct msm_cpp_payload_params));

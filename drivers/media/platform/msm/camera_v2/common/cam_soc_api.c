@@ -547,8 +547,24 @@ int msm_camera_get_regulator_info(struct platform_device *pdev,
 	of_node = pdev->dev.of_node;
 
 	if (!of_get_property(of_node, "qcom,vdd-names", NULL)) {
-		pr_err("err: Regulators property not found\n");
-		return -EINVAL;
+		if (of_get_property(of_node, "vdd-supply", NULL)) {
+			tmp_reg = devm_kcalloc(&pdev->dev, 1,
+						sizeof(struct msm_cam_regulator), GFP_KERNEL);
+			if (!tmp_reg)
+				return -ENOMEM;
+			tmp_reg[0].name = "vdd";
+			tmp_reg[0].vdd = devm_regulator_get(&pdev->dev, "vdd");
+			if (IS_ERR(tmp_reg[0].vdd)) {
+				pr_err("Fail to get regulator vdd\n");
+				return -EINVAL;
+			}
+			*num_reg = 1;
+			*vdd_info = tmp_reg;
+			return 0;
+		}
+		*num_reg = 0;
+		*vdd_info = NULL;
+		return 0;
 	}
 
 	cnt = of_property_count_strings(of_node, "qcom,vdd-names");
@@ -615,10 +631,8 @@ int msm_camera_regulator_enable(struct msm_cam_regulator *vdd_info,
 	int rc;
 	struct msm_cam_regulator *tmp = vdd_info;
 
-	if (!tmp) {
-		pr_err("Invalid params");
-		return -EINVAL;
-	}
+	if (!tmp || cnt == 0)
+		return 0;
 	CDBG("cnt : %d\n", cnt);
 
 	for (i = 0; i < cnt; i++) {
@@ -658,10 +672,8 @@ void msm_camera_put_regulators(struct platform_device *pdev,
 {
 	int i;
 
-	if (!vdd_info || !*vdd_info) {
-		pr_err("Invalid params\n");
+	if (!vdd_info || !*vdd_info || cnt == 0)
 		return;
-	}
 
 	for (i = cnt - 1; i >= 0; i--) {
 		if (vdd_info[i] && !IS_ERR_OR_NULL(vdd_info[i]->vdd))

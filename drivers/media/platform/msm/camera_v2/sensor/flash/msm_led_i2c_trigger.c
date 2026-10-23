@@ -861,6 +861,9 @@ int msm_flash_probe(struct platform_device *pdev,
 		return rc;
 	}
 
+	if (fctrl->flashdata)
+		fctrl->flashdata->power_info.dev = &pdev->dev;
+
 	if (fctrl->pinctrl_info.use_pinctrl == true)
 		msm_flash_pinctrl_init(fctrl);
 
